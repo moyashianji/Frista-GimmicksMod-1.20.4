@@ -1,11 +1,10 @@
 package com.furasuta.emergencyescape.network;
 
-import com.furasuta.emergencyescape.capability.BodyPartHealthCapability;
-import com.furasuta.emergencyescape.capability.EmergencyEscapeCapability;
-import net.minecraft.client.Minecraft;
+import com.furasuta.emergencyescape.client.ClientPacketHandler;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.world.entity.player.Player;
+import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.network.CustomPayloadEvent;
+import net.minecraftforge.fml.DistExecutor;
 
 public class SyncCapabilitiesPacket {
     private final float headHealth;
@@ -55,18 +54,14 @@ public class SyncCapabilitiesPacket {
 
     public static void handle(SyncCapabilitiesPacket packet, CustomPayloadEvent.Context ctx) {
         ctx.enqueueWork(() -> {
-            Player player = Minecraft.getInstance().player;
-            if (player != null) {
-                player.getCapability(BodyPartHealthCapability.CAPABILITY).ifPresent(cap -> {
-                    cap.setHeadHealth(packet.headHealth);
-                    cap.setBodyHealth(packet.bodyHealth);
-                    cap.setActive(packet.isActive);
-                });
-
-                player.getCapability(EmergencyEscapeCapability.CAPABILITY).ifPresent(cap -> {
-                    cap.setHasItem(packet.hasItem);
-                });
-            }
+            DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
+                ClientPacketHandler.handleSyncCapabilities(
+                        packet.headHealth, packet.bodyHealth,
+                        packet.maxHeadHealth, packet.maxBodyHealth,
+                        packet.isActive, packet.isEscaping,
+                        packet.escapeTicksRemaining, packet.hasItem
+                );
+            });
         });
         ctx.setPacketHandled(true);
     }

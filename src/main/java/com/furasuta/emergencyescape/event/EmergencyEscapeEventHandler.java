@@ -10,6 +10,8 @@ import com.furasuta.emergencyescape.init.ModSounds;
 import com.furasuta.emergencyescape.network.NetworkHandler;
 import com.furasuta.emergencyescape.network.SyncCapabilitiesPacket;
 import com.furasuta.emergencyescape.network.SpawnParticlesPacket;
+import com.furasuta.emergencyescape.util.HitPositionTracker;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -27,8 +29,16 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.network.PacketDistributor;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @Mod.EventBusSubscriber(modid = EmergencyEscapeMod.MODID)
 public class EmergencyEscapeEventHandler {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(EmergencyEscapeEventHandler.class);
+
+    // Set to true to enable debug messages in chat and console
+    private static final boolean DEBUG_HIT_DETECTION = true;
 
     @SubscribeEvent
     public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
@@ -126,9 +136,8 @@ public class EmergencyEscapeEventHandler {
                     cap.damageBody(damage);
                     break;
                 case LEGS:
-                    // Legs take no damage
-                    event.setCanceled(true);
-                    return;
+                    // Legs take no body part damage, but vanilla damage still applies
+                    break;
             }
 
             // Check if should trigger emergency escape
@@ -152,8 +161,8 @@ public class EmergencyEscapeEventHandler {
             }
         });
 
-        // Cancel vanilla damage - we handle health through body part system
-        event.setCanceled(true);
+        // Do NOT cancel vanilla damage - let default HP system work normally
+        // The body part system is an ADDITIONAL system, not a replacement
     }
 
     @SubscribeEvent
@@ -286,25 +295,98 @@ public class EmergencyEscapeEventHandler {
     }
 
     private static BodyPart determineHitBodyPart(Player player, DamageSource source) {
-        // Check if damage source has a direct entity (projectile or melee)
-        if (source.getDirectEntity() != null) {
-            double hitY = source.getDirectEntity().getY();
-            double playerY = player.getY();
-            double playerHeight = player.getBbHeight();
+        double playerY = player.getY();
+        double playerHeight = player.getBbHeight();
 
-            double relativeHitHeight = (hitY - playerY) / playerHeight;
+        String hitSource = "unknown";
+        BodyPart result = BodyPart.BODY; // Default
 
-            if (relativeHitHeight >= 0.75) {
-                return BodyPart.HEAD;
-            } else if (relativeHitHeight >= 0.35) {
-                return BodyPart.BODY;
+        // First, try to get accurate body part from Mixin tracker (uses raycast & hitbox detection)
+        HitPositionTracker.HitInfo hitInfo = HitPositionTracker.getLastHitInfo(player.getUUID());
+        if (hitInfo != null && hitInfo.bodyPart != null) {
+            hitSource = hitInfo.source;
+
+            // Convert from BodyPartHitbox.BodyPart to our BodyPart enum
+            switch (hitInfo.bodyPart) {
+                case HEAD:
+                    result = BodyPart.HEAD;
+                    break;
+                case BODY:
+                    result = BodyPart.BODY;
+                    break;
+                case LEGS:
+                    result = BodyPart.LEGS;
+                    break;
+                default:
+                    result = BodyPart.BODY;
+                    break;
+            }
+        }
+        // Fallback: use simpler detection methods
+        else {
+            // Head: top 28% of player (0.72 - 1.0, matching BodyPartHitbox)
+            double headThreshold = playerY + playerHeight * 0.72;
+            // Body: middle 41% of player (0.31 - 0.72)
+            double bodyThreshold = playerY + playerHeight * 0.31;
+
+            double hitY = playerY + playerHeight * 0.5; // Default to center
+
+            // For projectiles - use projectile's current position
+            if (source.getDirectEntity() != null && source.getDirectEntity() != source.getEntity()) {
+                hitY = source.getDirectEntity().getY();
+                hitSource = "projectile_fallback (" + source.getDirectEntity().getType().toShortString() + ")";
+
+                if (hitY >= headThreshold) {
+                    result = BodyPart.HEAD;
+                } else if (hitY >= bodyThreshold) {
+                    result = BodyPart.BODY;
+                } else {
+                    result = BodyPart.LEGS;
+                }
+            }
+            // For melee attacks - use attacker's eye height
+            else if (source.getEntity() != null) {
+                net.minecraft.world.entity.Entity attacker = source.getEntity();
+                hitY = attacker.getEyeY();
+                hitSource = "melee_fallback (" + attacker.getType().toShortString() + ")";
+
+                // Clamp to player's bounds
+                hitY = Math.max(playerY, Math.min(hitY, playerY + playerHeight));
+
+                if (hitY >= headThreshold) {
+                    result = BodyPart.HEAD;
+                } else if (hitY >= bodyThreshold) {
+                    result = BodyPart.BODY;
+                } else {
+                    result = BodyPart.LEGS;
+                }
             } else {
-                return BodyPart.LEGS;
+                // Default to body for environmental damage
+                hitSource = "environmental (" + source.type().msgId() + ")";
+                result = BodyPart.BODY;
             }
         }
 
-        // Default to body for environmental damage
-        return BodyPart.BODY;
+        // Debug output
+        if (DEBUG_HIT_DETECTION) {
+            String debugMsg = String.format("[HitDetect] Source: %s | Result: %s", hitSource, result.name());
+            LOGGER.info(debugMsg);
+
+            // Also send to player chat for easy debugging in-game
+            if (player instanceof ServerPlayer serverPlayer) {
+                // Color code based on body part
+                String colorCode = switch (result) {
+                    case HEAD -> "§c"; // Red for head
+                    case BODY -> "§e"; // Yellow for body
+                    case LEGS -> "§a"; // Green for legs
+                };
+                serverPlayer.sendSystemMessage(Component.literal(
+                    String.format("§7[Debug] §f%s → %s%s", hitSource, colorCode, result.name())
+                ));
+            }
+        }
+
+        return result;
     }
 
     private static void spawnDeathEffects(ServerPlayer player, double x, double y, double z) {

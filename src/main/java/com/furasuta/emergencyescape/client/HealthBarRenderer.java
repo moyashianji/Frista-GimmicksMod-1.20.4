@@ -47,15 +47,15 @@ public class HealthBarRenderer {
             int centerX = screenWidth / 2;
             int healthBarY = screenHeight - 39; // Vanilla health bar position
 
-            // Draw body health indicator (hexagon, left side)
-            int bodyX = centerX - 91; // Align with left side of health bar
-            int bodyY = healthBarY - 30;
-            drawBodyHealthIndicator(guiGraphics, bodyX, bodyY, cap.getBodyHealthPercent());
-
-            // Draw head health indicator (horizontal bar, right side)
-            int headX = centerX + 10;
+            // Draw head health indicator (horizontal bar, LEFT side)
+            int headX = centerX - 91; // Align with left side of health bar
             int headY = healthBarY - 22;
             drawHeadHealthIndicator(guiGraphics, headX, headY, cap.getHeadHealthPercent());
+
+            // Draw body health indicator (hexagon, RIGHT side)
+            int bodyX = centerX + 50;
+            int bodyY = healthBarY - 30;
+            drawBodyHealthIndicator(guiGraphics, bodyX, bodyY, cap.getBodyHealthPercent());
 
             // Draw voluntary escape progress bar if holding key
             float holdProgress = KeyInputHandler.getHoldProgress();
