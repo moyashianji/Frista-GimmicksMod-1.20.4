@@ -1,0 +1,7 @@
+{
+  "item.emergencyescape.emergency_escape": "緊急脱出",
+  "item.emergencyescape.emergency_escape.tooltip": "インベントリにあると特別な体力システムが有効になります",
+  "itemGroup.emergencyescape": "緊急脱出",
+  "key.categories.emergencyescape": "緊急脱出",
+  "key.emergencyescape.voluntary_escape": "自発的緊急脱出（長押し）"
+}
