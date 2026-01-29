@@ -1,6 +1,6 @@
 {
   "explosion": {
-    "category": "player",
+    "category": "players",
     "sounds": [
       {
         "name": "emergencyescape:explosion",
@@ -9,7 +9,7 @@
     ]
   },
   "zero": {
-    "category": "player",
+    "category": "players",
     "sounds": [
       {
         "name": "emergencyescape:zero",

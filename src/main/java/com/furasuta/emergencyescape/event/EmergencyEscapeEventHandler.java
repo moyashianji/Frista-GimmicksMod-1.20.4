@@ -47,8 +47,9 @@ public class EmergencyEscapeEventHandler {
     // Helper method to play zero sound when health/level reaches 0
     private static void playZeroSound(Player player) {
         if (player instanceof ServerPlayer serverPlayer) {
+            LOGGER.info("[EmergencyEscape] Playing ZERO sound at {}, {}, {}", player.getX(), player.getY(), player.getZ());
             serverPlayer.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                    ModSounds.ZERO.get(), player.getSoundSource(), 1.0f, 1.0f);
+                    ModSounds.ZERO.get(), net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.0f);
         }
     }
 
@@ -398,12 +399,6 @@ public class EmergencyEscapeEventHandler {
 
             LOGGER.info("[EmergencyEscape] Escape started! Duration: {}s ({} ticks)",
                 ModConfig.ESCAPE_DEATH_DELAY.get(), deathDelayTicks);
-
-            // Play explosion sound when escape is triggered
-            if (player instanceof ServerPlayer serverPlayer) {
-                serverPlayer.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                        ModSounds.EXPLOSION.get(), player.getSoundSource(), 1.0f, 1.0f);
-            }
         });
     }
 
@@ -553,7 +548,8 @@ public class EmergencyEscapeEventHandler {
         ServerLevel level = player.serverLevel();
 
         // Play explosion sound
-        level.playSound(null, x, y, z, ModSounds.EXPLOSION.get(), player.getSoundSource(), 1.0f, 1.0f);
+        LOGGER.info("[EmergencyEscape] Playing death EXPLOSION sound at {}, {}, {}", x, y, z);
+        level.playSound(null, x, y, z, ModSounds.EXPLOSION.get(), net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.0f);
 
         // Send packet to spawn particles on all nearby clients
         SpawnParticlesPacket packet = new SpawnParticlesPacket(x, y, z);
