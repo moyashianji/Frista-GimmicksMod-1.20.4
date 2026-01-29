@@ -44,6 +44,14 @@ public class EmergencyEscapeEventHandler {
         return ModConfig.DEBUG_MODE.get();
     }
 
+    // Helper method to play zero sound when health/level reaches 0
+    private static void playZeroSound(Player player) {
+        if (player instanceof ServerPlayer serverPlayer) {
+            serverPlayer.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                    ModSounds.ZERO.get(), player.getSoundSource(), 1.0f, 1.0f);
+        }
+    }
+
     @SubscribeEvent
     public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
@@ -89,6 +97,7 @@ public class EmergencyEscapeEventHandler {
                                 sp.sendSystemMessage(Component.literal("§c[Debug] Level consumed to 0 -> Emergency Escape triggered!"));
                             }
                         }
+                        playZeroSound(player);
                         triggerEmergencyEscape(player);
                     }
                 }
@@ -241,6 +250,8 @@ public class EmergencyEscapeEventHandler {
             if (isDebugMode() && player instanceof ServerPlayer sp) {
                 sp.sendSystemMessage(Component.literal("§c[Debug] " + reason + " -> Emergency Escape triggered!"));
             }
+            // Play zero sound for head/body health reaching 0
+            playZeroSound(player);
             // Cancel the damage - emergency escape will handle death
             event.setCanceled(true);
             triggerEmergencyEscape(player);
@@ -256,6 +267,7 @@ public class EmergencyEscapeEventHandler {
                     sp.sendSystemMessage(Component.literal("§c[Debug] Level = 0 -> Emergency Escape triggered!"));
                 }
             }
+            playZeroSound(player);
             triggerEmergencyEscape(player);
             return;
         }
@@ -274,6 +286,8 @@ public class EmergencyEscapeEventHandler {
                             currentHealth, damage, healthAfterDamage)));
                 }
             }
+            // Play zero sound for HP reaching 0
+            playZeroSound(player);
             // Cancel the damage - emergency escape will handle death
             event.setCanceled(true);
             triggerEmergencyEscape(player);
@@ -385,10 +399,10 @@ public class EmergencyEscapeEventHandler {
             LOGGER.info("[EmergencyEscape] Escape started! Duration: {}s ({} ticks)",
                 ModConfig.ESCAPE_DEATH_DELAY.get(), deathDelayTicks);
 
-            // Play activation sound
+            // Play explosion sound when escape is triggered
             if (player instanceof ServerPlayer serverPlayer) {
                 serverPlayer.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                        ModSounds.ZERO.get(), player.getSoundSource(), 1.0f, 1.0f);
+                        ModSounds.EXPLOSION.get(), player.getSoundSource(), 1.0f, 1.0f);
             }
         });
     }
