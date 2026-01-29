@@ -4,6 +4,7 @@ import com.furasuta.emergencyescape.capability.EmergencyEscapeCapability;
 import com.furasuta.emergencyescape.config.ModConfig;
 import com.furasuta.emergencyescape.event.EmergencyEscapeEventHandler;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraftforge.event.network.CustomPayloadEvent;
@@ -40,6 +41,7 @@ public class VoluntaryEscapePacket {
             // Check if player has emergency escape item
             if (!EmergencyEscapeEventHandler.hasEmergencyEscapeItem(player)) {
                 LOGGER.info("[VoluntaryEscape] Denied: Player does not have emergency escape item");
+                player.sendSystemMessage(Component.literal("§c緊急脱出失敗: 緊急脱出アイテムを持っていません"));
                 return;
             }
 
@@ -47,13 +49,15 @@ public class VoluntaryEscapePacket {
             player.getCapability(EmergencyEscapeCapability.CAPABILITY).ifPresent(cap -> {
                 if (cap.isEscaping()) {
                     LOGGER.info("[VoluntaryEscape] Denied: Player is already escaping");
+                    player.sendSystemMessage(Component.literal("§c緊急脱出失敗: すでに緊急脱出中です"));
                     return;
                 }
 
                 // Check if enemy players are nearby
                 if (isEnemyPlayerNearby(player)) {
-                    LOGGER.info("[VoluntaryEscape] Denied: Enemy player is nearby (within {} blocks)",
-                        ModConfig.VOLUNTARY_ESCAPE_RADIUS.get());
+                    int radius = ModConfig.VOLUNTARY_ESCAPE_RADIUS.get();
+                    LOGGER.info("[VoluntaryEscape] Denied: Enemy player is nearby (within {} blocks)", radius);
+                    player.sendSystemMessage(Component.literal("§c緊急脱出失敗: 敵プレイヤーから" + radius + "ブロック以上離れてください"));
                     return;
                 }
 
