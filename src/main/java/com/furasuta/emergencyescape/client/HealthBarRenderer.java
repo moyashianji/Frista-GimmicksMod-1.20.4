@@ -15,19 +15,37 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = EmergencyEscapeMod.MODID, value = Dist.CLIENT)
 public class HealthBarRenderer {
 
-    // Colors for body health (hexagon indicator)
+    // Colors for body health (horizontal bar indicator)
     private static final int BODY_CYAN = 0xFF00D9B8;      // 70%+ - Cyan/Teal
     private static final int BODY_YELLOW = 0xFFFFD700;    // 50-69% - Yellow
     private static final int BODY_ORANGE = 0xFFFF8C00;    // 30-49% - Orange
     private static final int BODY_RED = 0xFFFF0000;       // <30% - Red
+    private static final int BODY_BLACK = 0xFF000000;     // 0% - Black (dead)
 
-    // Colors for head health (horizontal bar)
-    private static final int HEAD_CYAN = 0xFF00D9B8;      // 50%+ - Cyan/Teal
-    private static final int HEAD_RED = 0xFFFF0000;       // <50% - Red
+    // Colors for head health (hexagon indicator) - 4-stage gradient like body
+    private static final int HEAD_CYAN = 0xFF00D9B8;      // 70%+ - Cyan/Teal
+    private static final int HEAD_YELLOW = 0xFFFFD700;    // 50-69% - Yellow
+    private static final int HEAD_ORANGE = 0xFFFF8C00;    // 30-49% - Orange
+    private static final int HEAD_RED = 0xFFFF0000;       // <30% - Red
+    private static final int HEAD_BLACK = 0xFF000000;     // 0% - Black (dead)
+
+    @SubscribeEvent
+    public static void onRenderGuiPre(RenderGuiOverlayEvent.Pre event) {
+        Minecraft mc = Minecraft.getInstance();
+        Player player = mc.player;
+        if (player == null) return;
+        if (!EmergencyEscapeEventHandler.hasEmergencyEscapeItem(player)) return;
+
+        // Hide vanilla health bar and hunger bar when escape item is held
+        if (event.getOverlay() == VanillaGuiOverlay.PLAYER_HEALTH.type()
+                || event.getOverlay() == VanillaGuiOverlay.FOOD_LEVEL.type()) {
+            event.setCanceled(true);
+        }
+    }
 
     @SubscribeEvent
     public static void onRenderGui(RenderGuiOverlayEvent.Post event) {
-        if (event.getOverlay() != VanillaGuiOverlay.PLAYER_HEALTH.type()) return;
+        if (event.getOverlay() != VanillaGuiOverlay.HOTBAR.type()) return;
 
         Minecraft mc = Minecraft.getInstance();
         Player player = mc.player;
@@ -47,15 +65,15 @@ public class HealthBarRenderer {
             int centerX = screenWidth / 2;
             int healthBarY = screenHeight - 39; // Vanilla health bar position
 
-            // Draw head health indicator (horizontal bar, LEFT side)
-            int headX = centerX - 91; // Align with left side of health bar
-            int headY = healthBarY - 22;
-            drawHeadHealthIndicator(guiGraphics, headX, headY, cap.getHeadHealthPercent());
-
-            // Draw body health indicator (hexagon, RIGHT side)
-            int bodyX = centerX + 50;
-            int bodyY = healthBarY - 30;
+            // Draw body health indicator (horizontal bar, LEFT side)
+            int bodyX = centerX - 91; // Align with left side of health bar
+            int bodyY = healthBarY - 22;
             drawBodyHealthIndicator(guiGraphics, bodyX, bodyY, cap.getBodyHealthPercent());
+
+            // Draw head health indicator (hexagon, RIGHT side)
+            int headX = centerX + 50;
+            int headY = healthBarY - 30;
+            drawHeadHealthIndicator(guiGraphics, headX, headY, cap.getHeadHealthPercent());
 
             // Draw voluntary escape progress bar if holding key
             float holdProgress = KeyInputHandler.getHoldProgress();
@@ -69,7 +87,9 @@ public class HealthBarRenderer {
         int color;
 
         // Body health colors based on percentage
-        if (healthPercent >= 70) {
+        if (healthPercent <= 0) {
+            color = BODY_BLACK;
+        } else if (healthPercent >= 70) {
             color = BODY_CYAN;
         } else if (healthPercent >= 50) {
             color = BODY_YELLOW;
@@ -79,41 +99,29 @@ public class HealthBarRenderer {
             color = BODY_RED;
         }
 
-        // Draw label text "胴体力" above with arrow
-        Minecraft mc = Minecraft.getInstance();
-        String label = "";
-        int labelWidth = mc.font.width(label);
-        guiGraphics.drawString(mc.font, label, x + 10 - labelWidth / 2, y - 12, 0xFFFFFF, true);
-
-        // Draw arrow pointing down
-        guiGraphics.drawString(mc.font, "", x + 10 - mc.font.width("↓") / 2, y - 2, 0xFFFFFF, true);
-
-        // Draw hexagon shape
-        drawHexagonShape(guiGraphics, x, y + 8, 20, color);
+        // Draw horizontal bar for body health
+        int barWidth = 82;
+        drawHealthBar(guiGraphics, x, y, barWidth, 8, color);
     }
 
     private static void drawHeadHealthIndicator(GuiGraphics guiGraphics, int x, int y, float healthPercent) {
         int color;
 
-        // Head health colors based on percentage
-        if (healthPercent >= 50) {
+        // Head health colors based on percentage (4-stage gradient like body)
+        if (healthPercent <= 0) {
+            color = HEAD_BLACK;
+        } else if (healthPercent >= 70) {
             color = HEAD_CYAN;
+        } else if (healthPercent >= 50) {
+            color = HEAD_YELLOW;
+        } else if (healthPercent >= 30) {
+            color = HEAD_ORANGE;
         } else {
             color = HEAD_RED;
         }
 
-        // Draw label text "頭体力" above with arrow
-        Minecraft mc = Minecraft.getInstance();
-        String label = "";
-        int labelWidth = mc.font.width(label);
-        int barWidth = 82;
-        guiGraphics.drawString(mc.font, label, x + barWidth / 2 - labelWidth / 2, y - 20, 0xFFFFFF, true);
-
-        // Draw arrow pointing down
-        guiGraphics.drawString(mc.font, "", x + barWidth / 2 - mc.font.width("↓") / 2, y - 10, 0xFFFFFF, true);
-
-        // Draw horizontal bar
-        drawHealthBar(guiGraphics, x, y, barWidth, 8, color);
+        // Draw hexagon shape for head health
+        drawHexagonShape(guiGraphics, x, y + 8, 20, color);
     }
 
     private static void drawHealthBar(GuiGraphics guiGraphics, int x, int y, int width, int height, int color) {

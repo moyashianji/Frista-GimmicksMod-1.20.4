@@ -34,28 +34,17 @@ public class DamageConsumptionCapability implements INBTSerializable<CompoundTag
     }
 
     /**
-     * Add or refresh a consumption timer.
-     * If a timer of the same type already exists, it will be refreshed (duration reset) instead of adding a new one.
+     * Add a new consumption timer. All timers stack (no refresh).
+     * Multiple attacks = more level consumption.
      */
     public void addConsumption(boolean isLargeDamage, boolean isInstant, int durationTicks, int intervalTicks, int amount) {
         String timerType = (isLargeDamage ? "Large" : "Small") + (isInstant ? "/Instant" : "/Sustained");
 
-        // Check if a timer of the same type already exists
-        for (ConsumptionTimer existing : activeTimers) {
-            if (existing.isLargeDamage() == isLargeDamage && existing.isInstant() == isInstant) {
-                // Refresh the existing timer instead of adding a new one
-                existing.refresh(durationTicks);
-                LOGGER.info("[EmergencyEscape] Timer refreshed: [{}] duration={}ticks({}s), interval={}ticks({}s), amount={}, totalTimers={}",
-                    timerType, durationTicks, durationTicks/20.0, intervalTicks, intervalTicks/20.0, amount, activeTimers.size());
-                return;
-            }
-        }
-
-        // No existing timer, add a new one
+        // Always add a new timer - stacking allows more consumption with more attacks
         ConsumptionTimer timer = new ConsumptionTimer(isLargeDamage, isInstant, durationTicks, intervalTicks, amount);
         activeTimers.add(timer);
 
-        LOGGER.info("[EmergencyEscape] Timer added: [{}] duration={}ticks({}s), interval={}ticks({}s), amount={}, totalTimers={}",
+        LOGGER.info("[EmergencyEscape] Timer stacked: [{}] duration={}ticks({}s), interval={}ticks({}s), amount={}, totalTimers={}",
             timerType, durationTicks, durationTicks/20.0, intervalTicks, intervalTicks/20.0, amount, activeTimers.size());
     }
 

@@ -25,8 +25,9 @@ public class EmergencyEscapeMod {
     public static final String MODID = "emergencyescape";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public EmergencyEscapeMod(FMLJavaModLoadingContext context) {
-        IEventBus modEventBus = context.getModEventBus();
+    @SuppressWarnings("removal")
+    public EmergencyEscapeMod() {
+        IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
 
         // Register config
         ModLoadingContext.get().registerConfig(Type.COMMON, ModConfig.SPEC);

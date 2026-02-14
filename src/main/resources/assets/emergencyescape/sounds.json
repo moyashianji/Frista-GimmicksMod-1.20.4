@@ -16,5 +16,23 @@
         "stream": false
       }
     ]
+  },
+  "alert1": {
+    "category": "players",
+    "sounds": [
+      {
+        "name": "emergencyescape:alert1",
+        "stream": false
+      }
+    ]
+  },
+  "alert2": {
+    "category": "players",
+    "sounds": [
+      {
+        "name": "emergencyescape:alert2",
+        "stream": false
+      }
+    ]
   }
 }

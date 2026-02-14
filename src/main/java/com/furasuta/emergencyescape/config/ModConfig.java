@@ -37,10 +37,18 @@ public class ModConfig {
     public static final ForgeConfigSpec.IntValue ESCAPE_DEATH_DELAY;
     public static final ForgeConfigSpec.IntValue VOLUNTARY_ESCAPE_RADIUS;
     public static final ForgeConfigSpec.IntValue VOLUNTARY_ESCAPE_HOLD_TIME;
+    public static final ForgeConfigSpec.IntValue EXPLOSION_SOUND_RANGE;
 
     // 部位体力設定
     public static final ForgeConfigSpec.IntValue HEAD_MAX_HEALTH;
     public static final ForgeConfigSpec.IntValue BODY_MAX_HEALTH;
+
+    // 部位判定の高さ閾値設定
+    public static final ForgeConfigSpec.IntValue HEAD_THRESHOLD_PERCENT;
+    public static final ForgeConfigSpec.IntValue BODY_THRESHOLD_PERCENT;
+
+    // アラート設定
+    public static final ForgeConfigSpec.DoubleValue ALERT_VOLUME;
 
     // リスポーン設定
     public static final ForgeConfigSpec.IntValue RESPAWN_LEVEL;
@@ -135,15 +143,33 @@ public class ModConfig {
         VOLUNTARY_ESCAPE_HOLD_TIME = BUILDER
                 .comment("任意脱出を発動するためのPキー長押し時間（ミリ秒）")
                 .defineInRange("voluntaryEscapeHoldTime", 1000, 100, 5000);
+        EXPLOSION_SOUND_RANGE = BUILDER
+                .comment("緊急脱出の爆発音が聞こえる範囲（ブロック）")
+                .defineInRange("explosionSoundRange", 30, 1, 200);
         BUILDER.pop();
 
         BUILDER.comment("部位体力設定").push("bodyPartHealth");
         HEAD_MAX_HEALTH = BUILDER
                 .comment("頭の最大体力")
-                .defineInRange("headMaxHealth", 10, 1, 100);
+                .defineInRange("headMaxHealth", 10, 1, 1000);
         BODY_MAX_HEALTH = BUILDER
                 .comment("胴体の最大体力")
-                .defineInRange("bodyMaxHealth", 40, 1, 200);
+                .defineInRange("bodyMaxHealth", 40, 1, 1000);
+        BUILDER.pop();
+
+        BUILDER.comment("部位判定の高さ閾値設定（プレイヤーの身長に対する%）").push("bodyPartThreshold");
+        HEAD_THRESHOLD_PERCENT = BUILDER
+                .comment("頭の判定開始位置（%）- この高さより上が頭判定")
+                .defineInRange("headThresholdPercent", 75, 1, 100);
+        BODY_THRESHOLD_PERCENT = BUILDER
+                .comment("胴体の判定開始位置（%）- この高さより上が胴体判定（頭の閾値より下の部分）")
+                .defineInRange("bodyThresholdPercent", 38, 1, 100);
+        BUILDER.pop();
+
+        BUILDER.comment("アラート設定").push("alert");
+        ALERT_VOLUME = BUILDER
+                .comment("部位体力アラートの音量（0.0〜2.0）")
+                .defineInRange("alertVolume", 1.0, 0.0, 2.0);
         BUILDER.pop();
 
         BUILDER.comment("リスポーン設定").push("respawn");

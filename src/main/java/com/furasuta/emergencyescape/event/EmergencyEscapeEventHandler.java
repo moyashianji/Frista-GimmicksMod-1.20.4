@@ -21,7 +21,6 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingDamageEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
@@ -34,10 +33,17 @@ import net.minecraftforge.network.PacketDistributor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 @Mod.EventBusSubscriber(modid = EmergencyEscapeMod.MODID)
 public class EmergencyEscapeEventHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EmergencyEscapeEventHandler.class);
+
+    // Alert tracking per player: [0]=head alert played, [1]=body alert played
+    private static final Map<UUID, boolean[]> alertTracker = new HashMap<>();
 
     // Helper method to check debug mode from config
     private static boolean isDebugMode() {
@@ -50,6 +56,62 @@ public class EmergencyEscapeEventHandler {
             LOGGER.info("[EmergencyEscape] Playing ZERO sound at {}, {}, {}", player.getX(), player.getY(), player.getZ());
             serverPlayer.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                     ModSounds.ZERO.get(), net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.0f);
+        }
+    }
+
+    // Helper method to play alert sounds when health thresholds are crossed
+    private static void checkAndPlayAlertSounds(Player player, float headHealthPercent, float bodyHealthPercent) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return;
+
+        UUID playerId = player.getUUID();
+        boolean[] alerts = alertTracker.computeIfAbsent(playerId, k -> new boolean[]{false, false});
+        float alertVolume = ModConfig.ALERT_VOLUME.get().floatValue();
+
+        // Head alert: below 50%
+        if (headHealthPercent < 50 && headHealthPercent > 0 && !alerts[0]) {
+            alerts[0] = true;
+            LOGGER.info("[EmergencyEscape] Playing ALERT1 (head <50%) for {}", player.getName().getString());
+            serverPlayer.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                    ModSounds.ALERT1.get(), net.minecraft.sounds.SoundSource.PLAYERS, alertVolume, 1.0f);
+        }
+
+        // Body alert: below 30%
+        if (bodyHealthPercent < 30 && bodyHealthPercent > 0 && !alerts[1]) {
+            alerts[1] = true;
+            LOGGER.info("[EmergencyEscape] Playing ALERT2 (body <30%) for {}", player.getName().getString());
+            serverPlayer.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                    ModSounds.ALERT2.get(), net.minecraft.sounds.SoundSource.PLAYERS, alertVolume, 1.0f);
+        }
+    }
+
+    // Helper method to determine gas particle type from active consumption timers
+    // 0=none, 1=heavy(large instant), 2=light(other consumption)
+    private static int getGasParticleType(Player player) {
+        final int[] result = {0};
+        player.getCapability(DamageConsumptionCapability.CAPABILITY).ifPresent(cap -> {
+            if (!cap.isActive() || cap.getActiveTimers().isEmpty()) return;
+
+            for (DamageConsumptionCapability.ConsumptionTimer timer : cap.getActiveTimers()) {
+                if (timer.isLargeDamage() && timer.isInstant()) {
+                    result[0] = 1; // Heavy gas takes priority
+                    return;
+                } else if (result[0] == 0) {
+                    result[0] = 2; // Light gas for other types
+                }
+            }
+        });
+        return result[0];
+    }
+
+    // Helper method to remove escape item from inventory
+    private static void removeEscapeItem(Player player) {
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack stack = player.getInventory().getItem(i);
+            if (stack.getItem() == ModItems.EMERGENCY_ESCAPE_ITEM.get()) {
+                player.getInventory().removeItem(i, 1);
+                LOGGER.info("[EmergencyEscape] Removed escape item from slot {} for {}", i, player.getName().getString());
+                return;
+            }
         }
     }
 
@@ -114,14 +176,30 @@ public class EmergencyEscapeEventHandler {
         // Handle emergency escape state
         player.getCapability(EmergencyEscapeCapability.CAPABILITY).ifPresent(cap -> {
             if (cap.isEscaping()) {
-                // Lock player position
+                // === Complete movement freeze ===
+
+                // 1. Server-side position lock
                 player.setPos(cap.getEscapeX(), cap.getEscapeY(), cap.getEscapeZ());
-                player.setDeltaMovement(Vec3.ZERO);
+
+                // 2. Kill ALL velocity
+                player.setDeltaMovement(0, 0, 0);
                 player.hurtMarked = true;
 
-                // Add slow falling effect
-                if (!player.hasEffect(MobEffects.SLOW_FALLING)) {
-                    player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, 100, 0, false, false));
+                // 3. Prevent jumping
+                player.setOnGround(true);
+                player.fallDistance = 0;
+
+                // 4. Apply extreme Slowness (amplifier 255) to block client-side movement prediction
+                //    Also apply Jump Boost -128 (amplifier 128+) to prevent jump
+                if (!player.hasEffect(MobEffects.MOVEMENT_SLOWDOWN)
+                        || player.getEffect(MobEffects.MOVEMENT_SLOWDOWN).getAmplifier() < 200) {
+                    player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 100, 255, false, false, false));
+                }
+
+                // 5. Force client position sync via teleport packet (every 2 ticks)
+                if (player instanceof ServerPlayer sp && cap.getEscapeTicksRemaining() % 2 == 0) {
+                    sp.connection.teleport(cap.getEscapeX(), cap.getEscapeY(), cap.getEscapeZ(),
+                            player.getYRot(), player.getXRot());
                 }
 
                 // Log escape countdown every second
@@ -136,7 +214,10 @@ public class EmergencyEscapeEventHandler {
                     LOGGER.info("[EmergencyEscape] Escape timer reached 0, killing player: {}",
                         player.getName().getString());
 
-                    // Spawn death effects
+                    // Remove slowness before death
+                    player.removeEffect(MobEffects.MOVEMENT_SLOWDOWN);
+
+                    // Spawn death effects at escape position
                     if (player instanceof ServerPlayer serverPlayer) {
                         spawnDeathEffects(serverPlayer, cap.getEscapeX(), cap.getEscapeY(), cap.getEscapeZ());
                     }
@@ -220,6 +301,9 @@ public class EmergencyEscapeEventHandler {
             healthAfter[0] = cap.getHeadHealth();
             healthAfter[1] = cap.getBodyHealth();
 
+            // Check alert sounds
+            checkAndPlayAlertSounds(player, cap.getHeadHealthPercent(), cap.getBodyHealthPercent());
+
             // Check if head or body health reached 0 -> trigger emergency escape
             if (cap.getHeadHealth() <= 0 || cap.getBodyHealth() <= 0) {
                 shouldTriggerEscape[0] = true;
@@ -269,33 +353,13 @@ public class EmergencyEscapeEventHandler {
                 }
             }
             playZeroSound(player);
+            event.setCanceled(true);
             triggerEmergencyEscape(player);
             return;
         }
 
-        // Check if this damage would kill the player (vanilla HP reaching 0)
-        // Note: LivingDamageEvent fires BEFORE damage is applied, so we need to calculate
-        float currentHealth = player.getHealth();
-        float healthAfterDamage = currentHealth - damage;
-
-        if (healthAfterDamage <= 0) {
-            if (isDebugMode()) {
-                LOGGER.info("[EmergencyEscape] Triggering escape due to lethal damage. Current HP: {}, Damage: {}", currentHealth, damage);
-                if (player instanceof ServerPlayer sp) {
-                    sp.sendSystemMessage(Component.literal(
-                        String.format("§c[Debug] Lethal damage (HP: %.1f - %.1f = %.1f) -> Emergency Escape triggered!",
-                            currentHealth, damage, healthAfterDamage)));
-                }
-            }
-            // Play zero sound for HP reaching 0
-            playZeroSound(player);
-            // Cancel the damage - emergency escape will handle death
-            event.setCanceled(true);
-            triggerEmergencyEscape(player);
-        }
-
-        // Do NOT cancel vanilla damage otherwise - let default HP system work normally
-        // The body part system is an ADDITIONAL display system, not a replacement
+        // Always cancel vanilla HP damage - body part system replaces vanilla health
+        event.setCanceled(true);
     }
 
     @SubscribeEvent
@@ -313,16 +377,23 @@ public class EmergencyEscapeEventHandler {
             cap.reset();
         });
 
-        // Clear escape state
+        // Clear escape state and remove freeze effects
         player.getCapability(EmergencyEscapeCapability.CAPABILITY).ifPresent(cap -> {
             cap.stopEscape();
         });
+        player.removeEffect(MobEffects.MOVEMENT_SLOWDOWN);
+
+        // Clear alert tracker on death
+        alertTracker.remove(player.getUUID());
     }
 
     @SubscribeEvent
     public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
         Player player = event.getEntity();
         if (player.level().isClientSide()) return;
+
+        // Remove any leftover freeze effects
+        player.removeEffect(MobEffects.MOVEMENT_SLOWDOWN);
 
         // Reset capabilities on respawn
         player.getCapability(BodyPartHealthCapability.CAPABILITY).ifPresent(cap -> {
@@ -338,6 +409,9 @@ public class EmergencyEscapeEventHandler {
         player.getCapability(EmergencyEscapeCapability.CAPABILITY).ifPresent(cap -> {
             cap.stopEscape();
         });
+
+        // Clear alert tracker on respawn
+        alertTracker.remove(player.getUUID());
 
         // Set player level to configured respawn level
         int respawnLevel = ModConfig.RESPAWN_LEVEL.get();
@@ -383,6 +457,7 @@ public class EmergencyEscapeEventHandler {
         Player player = event.getEntity();
         PlayerModelPartCache.removePlayer(player.getUUID());
         HitPositionTracker.clearHitInfo(player.getUUID());
+        alertTracker.remove(player.getUUID());
     }
 
     public static void triggerEmergencyEscape(Player player) {
@@ -396,6 +471,9 @@ public class EmergencyEscapeEventHandler {
 
             int deathDelayTicks = ModConfig.ESCAPE_DEATH_DELAY.get() * 20;
             cap.startEscape(player, deathDelayTicks);
+
+            // Remove escape item from inventory when escape triggers
+            removeEscapeItem(player);
 
             LOGGER.info("[EmergencyEscape] Escape started! Duration: {}s ({} ticks)",
                 ModConfig.ESCAPE_DEATH_DELAY.get(), deathDelayTicks);
@@ -449,6 +527,10 @@ public class EmergencyEscapeEventHandler {
         double playerY = player.getY();
         double playerHeight = player.getBbHeight();
 
+        // Get config thresholds (percentage)
+        double headThresholdPercent = ModConfig.HEAD_THRESHOLD_PERCENT.get() / 100.0;
+        double bodyThresholdPercent = ModConfig.BODY_THRESHOLD_PERCENT.get() / 100.0;
+
         String hitSource = "unknown";
         BodyPart result = BodyPart.BODY; // Default
 
@@ -475,14 +557,10 @@ public class EmergencyEscapeEventHandler {
                     break;
             }
         }
-        // Fallback: use simpler detection methods
+        // Fallback: use simpler detection methods with config thresholds
         else {
-            // Based on corrected HumanoidModel proportions:
-            // Head: 75% - 100% of player height (model Y -8 to 0)
-            // Body: 37.5% - 75% of player height (model Y 0 to 12)
-            // Legs: 0% - 37.5% of player height (model Y 12 to 24)
-            double headThreshold = playerY + playerHeight * 0.75;
-            double bodyThreshold = playerY + playerHeight * 0.375;
+            double headThreshold = playerY + playerHeight * headThresholdPercent;
+            double bodyThreshold = playerY + playerHeight * bodyThresholdPercent;
 
             double hitY = playerY + playerHeight * 0.5; // Default to center
 
@@ -547,9 +625,13 @@ public class EmergencyEscapeEventHandler {
     private static void spawnDeathEffects(ServerPlayer player, double x, double y, double z) {
         ServerLevel level = player.serverLevel();
 
-        // Play explosion sound
-        LOGGER.info("[EmergencyEscape] Playing death EXPLOSION sound at {}, {}, {}", x, y, z);
-        level.playSound(null, x, y, z, ModSounds.EXPLOSION.get(), net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.0f);
+        // Play explosion sound with configurable range
+        // Sound range in Minecraft ≈ volume * 16 blocks
+        int explosionRange = ModConfig.EXPLOSION_SOUND_RANGE.get();
+        float explosionVolume = explosionRange / 16.0f;
+        LOGGER.info("[EmergencyEscape] Playing death EXPLOSION sound at {}, {}, {} (range={} blocks, volume={})",
+            x, y, z, explosionRange, explosionVolume);
+        level.playSound(null, x, y, z, ModSounds.EXPLOSION.get(), net.minecraft.sounds.SoundSource.PLAYERS, explosionVolume, 1.0f);
 
         // Send packet to spawn particles on all nearby clients
         SpawnParticlesPacket packet = new SpawnParticlesPacket(x, y, z);
@@ -570,6 +652,7 @@ public class EmergencyEscapeEventHandler {
     private static void syncCapabilities(ServerPlayer player) {
         player.getCapability(BodyPartHealthCapability.CAPABILITY).ifPresent(bodyPartCap -> {
             player.getCapability(EmergencyEscapeCapability.CAPABILITY).ifPresent(escapeCap -> {
+                int gasParticleType = getGasParticleType(player);
                 SyncCapabilitiesPacket packet = new SyncCapabilitiesPacket(
                         bodyPartCap.getHeadHealth(),
                         bodyPartCap.getBodyHealth(),
@@ -578,7 +661,8 @@ public class EmergencyEscapeEventHandler {
                         bodyPartCap.isActive(),
                         escapeCap.isEscaping(),
                         escapeCap.getEscapeTicksRemaining(),
-                        escapeCap.hasItem()
+                        escapeCap.hasItem(),
+                        gasParticleType
                 );
                 NetworkHandler.CHANNEL.send(packet, PacketDistributor.PLAYER.with(player));
             });

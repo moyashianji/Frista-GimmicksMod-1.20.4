@@ -68,6 +68,10 @@ public class EmergencyEscapeCapability implements INBTSerializable<CompoundTag> 
         return escapeZ;
     }
 
+    public void updateEscapeY(double y) {
+        this.escapeY = y;
+    }
+
     public boolean hasItem() {
         return hasItem;
     }

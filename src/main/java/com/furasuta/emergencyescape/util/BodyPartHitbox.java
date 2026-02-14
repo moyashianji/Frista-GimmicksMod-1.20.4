@@ -1,5 +1,6 @@
 package com.furasuta.emergencyescape.util;
 
+import com.furasuta.emergencyescape.config.ModConfig;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -351,16 +352,15 @@ public class BodyPartHitbox {
             return BodyPart.LEGS;
         }
 
-        // Fallback: use Y position relative to player height
+        // Fallback: use Y position relative to player height with config thresholds
         double relativeY = (hitPoint.y - player.getY()) / player.getBbHeight();
 
-        // Based on HumanoidModel proportions (corrected):
-        // Head: 75% - 100% (model Y -8 to 0)
-        // Body: 37.5% - 75% (model Y 0 to 12)
-        // Legs: 0% - 37.5% (model Y 12 to 24)
-        if (relativeY >= 0.75) {
+        double headThreshold = ModConfig.HEAD_THRESHOLD_PERCENT.get() / 100.0;
+        double bodyThreshold = ModConfig.BODY_THRESHOLD_PERCENT.get() / 100.0;
+
+        if (relativeY >= headThreshold) {
             return BodyPart.HEAD;
-        } else if (relativeY >= 0.375) {
+        } else if (relativeY >= bodyThreshold) {
             return BodyPart.BODY;
         } else {
             return BodyPart.LEGS;
