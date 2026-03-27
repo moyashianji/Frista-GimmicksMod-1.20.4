@@ -9,27 +9,17 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Server-side cache for player model part positions and rotations.
- * This data is synced from clients to allow accurate pose-aware hit detection.
+ * プレイヤーモデルパーツの位置・回転をサーバー側にキャッシュする。
+ * クライアントから同期されたデータを使い、ポーズを考慮した被弾判定を行う。
  */
 public class PlayerModelPartCache {
 
-    /**
-     * Stores model part data for each player.
-     * Key: Player UUID
-     * Value: PartData array containing position and rotation for each body part
-     */
     private static final Map<UUID, CachedPlayerParts> playerPartsCache = new ConcurrentHashMap<>();
 
-    /**
-     * Time in milliseconds after which cached data is considered stale.
-     * If data is older than this, we fall back to default pose calculations.
-     */
-    private static final long CACHE_EXPIRY_MS = 500; // 500ms = 10 ticks
+    /** キャッシュの有効期限 (500ms = 10tick) */
+    private static final long CACHE_EXPIRY_MS = 500;
 
-    /**
-     * Part indices for the data array.
-     */
+    /** パーツインデックス */
     public static final int PART_HEAD = 0;
     public static final int PART_BODY = 1;
     public static final int PART_LEFT_ARM = 2;
@@ -38,11 +28,9 @@ public class PlayerModelPartCache {
     public static final int PART_RIGHT_LEG = 5;
 
     /**
-     * Update the cached part data for a player.
-     * Called when receiving a SyncModelPartPacket from the client.
-     *
-     * @param playerUUID The player's UUID
-     * @param partData Array of 36 floats (6 parts × 6 values each)
+     * プレイヤーのパーツデータを更新する。
+     * @param playerUUID プレイヤーのUUID
+     * @param partData 36個のfloat配列 (6パーツ x 6値)
      */
     public static void updatePlayerParts(UUID playerUUID, float[] partData) {
         CachedPlayerParts cached = new CachedPlayerParts(partData, System.currentTimeMillis());
@@ -50,10 +38,7 @@ public class PlayerModelPartCache {
     }
 
     /**
-     * Get the cached part data for a player.
-     *
-     * @param playerUUID The player's UUID
-     * @return The cached data, or null if not available or expired
+     * プレイヤーのキャッシュ済みパーツデータを取得する。期限切れの場合はnullを返す。
      */
     public static CachedPlayerParts getPlayerParts(UUID playerUUID) {
         CachedPlayerParts cached = playerPartsCache.get(playerUUID);
@@ -61,37 +46,30 @@ public class PlayerModelPartCache {
             return null;
         }
 
-        // Check if data is still fresh
         if (System.currentTimeMillis() - cached.timestamp > CACHE_EXPIRY_MS) {
-            return null; // Data is stale
+            return null;
         }
 
         return cached;
     }
 
-    /**
-     * Check if we have valid (non-stale) data for a player.
-     */
+    /** 有効なデータが存在するかを返す。 */
     public static boolean hasValidData(UUID playerUUID) {
         return getPlayerParts(playerUUID) != null;
     }
 
-    /**
-     * Remove cached data for a player (e.g., when they disconnect).
-     */
+    /** プレイヤーのキャッシュを削除する（切断時など）。 */
     public static void removePlayer(UUID playerUUID) {
         playerPartsCache.remove(playerUUID);
     }
 
-    /**
-     * Clear all cached data.
-     */
+    /** 全キャッシュをクリアする。 */
     public static void clearAll() {
         playerPartsCache.clear();
     }
 
     /**
-     * Holds cached part data for a single player.
+     * プレイヤー1人分のキャッシュ済みパーツデータ。
      */
     public static class CachedPlayerParts {
         private final PartTransform[] parts;
@@ -104,12 +82,12 @@ public class PlayerModelPartCache {
             for (int i = 0; i < 6; i++) {
                 int offset = i * 6;
                 parts[i] = new PartTransform(
-                    data[offset],      // x
-                    data[offset + 1],  // y
-                    data[offset + 2],  // z
-                    data[offset + 3],  // xRot
-                    data[offset + 4],  // yRot
-                    data[offset + 5]   // zRot
+                    data[offset],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                    data[offset + 4],
+                    data[offset + 5]
                 );
             }
         }
@@ -134,12 +112,11 @@ public class PlayerModelPartCache {
     }
 
     /**
-     * Represents the transform (position offset and rotation) of a model part.
-     * Rotations are in radians, matching ModelPart's format.
+     * モデルパーツの位置オフセットと回転を保持する。回転はラジアン単位。
      */
     public static class PartTransform {
-        public final float x, y, z;      // Position offset in model pixels
-        public final float xRot, yRot, zRot;  // Rotation in radians
+        public final float x, y, z;
+        public final float xRot, yRot, zRot;
 
         public PartTransform(float x, float y, float z, float xRot, float yRot, float zRot) {
             this.x = x;
@@ -151,29 +128,22 @@ public class PlayerModelPartCache {
         }
 
         /**
-         * Check if this part has significant rotation from default pose.
-         * Used to determine if we need to apply rotation transforms for hitbox.
+         * デフォルトポーズから有意な回転があるかを返す。
          */
         public boolean hasSignificantRotation() {
-            float threshold = 0.1f; // ~5.7 degrees
+            float threshold = 0.1f; // 約5.7度
             return Math.abs(xRot) > threshold || Math.abs(yRot) > threshold || Math.abs(zRot) > threshold;
         }
 
         /**
-         * Apply this rotation to a point around a pivot point.
-         * Uses standard Euler rotation order: X, then Y, then Z.
-         *
-         * @param point The point to rotate (in world coordinates)
-         * @param pivot The pivot point (in world coordinates)
-         * @return The rotated point
+         * ピボット点を中心にオイラー回転(X→Y→Z)を適用する。
          */
         public Vec3 rotatePoint(Vec3 point, Vec3 pivot) {
-            // Translate to pivot origin
             double px = point.x - pivot.x;
             double py = point.y - pivot.y;
             double pz = point.z - pivot.z;
 
-            // Apply X rotation (pitch)
+            // X回転 (ピッチ)
             double cosX = Math.cos(xRot);
             double sinX = Math.sin(xRot);
             double y1 = py * cosX - pz * sinX;
@@ -181,7 +151,7 @@ public class PlayerModelPartCache {
             py = y1;
             pz = z1;
 
-            // Apply Y rotation (yaw)
+            // Y回転 (ヨー)
             double cosY = Math.cos(yRot);
             double sinY = Math.sin(yRot);
             double x1 = px * cosY + pz * sinY;
@@ -189,7 +159,7 @@ public class PlayerModelPartCache {
             px = x1;
             pz = z2;
 
-            // Apply Z rotation (roll)
+            // Z回転 (ロール)
             double cosZ = Math.cos(zRot);
             double sinZ = Math.sin(zRot);
             double x2 = px * cosZ - py * sinZ;
@@ -197,13 +167,11 @@ public class PlayerModelPartCache {
             px = x2;
             py = y2;
 
-            // Translate back
             return new Vec3(px + pivot.x, py + pivot.y, pz + pivot.z);
         }
 
         /**
-         * Get the position offset as a Vec3.
-         * Converts from model pixels to blocks (÷16).
+         * 位置オフセットをブロック単位のVec3として返す（モデルピクセル / 16）。
          */
         public Vec3 getPositionOffset() {
             return new Vec3(x / 16.0, y / 16.0, z / 16.0);

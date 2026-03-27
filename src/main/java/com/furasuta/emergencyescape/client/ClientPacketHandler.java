@@ -4,71 +4,65 @@ import com.furasuta.emergencyescape.capability.BodyPartHealthCapability;
 import com.furasuta.emergencyescape.capability.EmergencyEscapeCapability;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 
 import java.util.Random;
 
 /**
- * Client-side packet handler. This class should only be loaded on the client.
+ * クライアント側パケットハンドラ。
  */
 public class ClientPacketHandler {
 
-    // Current gas particle type synced from server (0=none, 1=heavy, 2=light)
-    private static int currentGasParticleType = 0;
-
-    public static int getCurrentGasParticleType() {
-        return currentGasParticleType;
-    }
-
     public static void handleSyncCapabilities(float headHealth, float bodyHealth, int maxHeadHealth, int maxBodyHealth,
-                                               boolean isActive, boolean isEscaping, int escapeTicksRemaining, boolean hasItem,
-                                               int gasParticleType) {
+                                               boolean isActive, boolean isEscaping, int escapeTicksRemaining, boolean systemActive) {
         Minecraft mc = Minecraft.getInstance();
         Player player = mc.player;
         if (player != null) {
             player.getCapability(BodyPartHealthCapability.CAPABILITY).ifPresent(cap -> {
-                // Use syncFromServer to avoid resetting health values
                 cap.syncFromServer(headHealth, bodyHealth, maxHeadHealth, maxBodyHealth, isActive);
             });
 
             player.getCapability(EmergencyEscapeCapability.CAPABILITY).ifPresent(cap -> {
-                cap.setHasItem(hasItem);
+                cap.setHasItem(systemActive);
             });
-
-            // Update gas particle type
-            currentGasParticleType = gasParticleType;
-
-            // Spawn gas particles on client based on type
-            if (gasParticleType > 0) {
-                spawnGasParticles(player, gasParticleType);
-            }
         }
     }
 
-    private static void spawnGasParticles(Player player, int type) {
-        Level level = player.level();
-        if (level == null) return;
+    /**
+     * 他プレイヤーのガスパーティクルを表示する。
+     * 自分自身のガスは表示しない（視界の邪魔になるため）。
+     */
+    public static void handleSpawnGasParticles(int entityId, int gasType, double x, double y, double z) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.level == null) return;
 
+        // 自分自身のパーティクルは表示しない
+        if (mc.player.getId() == entityId) return;
+
+        Level level = mc.level;
+        Entity entity = level.getEntity(entityId);
+        if (entity == null) return;
+
+        spawnGasParticles(level, x, y, z, gasType);
+    }
+
+    private static void spawnGasParticles(Level level, double x, double y, double z, int type) {
         Random random = new Random();
-        double x = player.getX();
-        double y = player.getY();
-        double z = player.getZ();
 
         if (type == 1) {
-            // Heavy gas - 噴射 (jet/spray) effect for large damage instant consumption
-            // Dense black smoke spraying outward from body
+            // 重ガス - 大ダメージ即時消費時の噴射エフェクト
             for (int i = 0; i < 5; i++) {
                 double offsetX = (random.nextDouble() - 0.5) * 0.6;
                 double offsetY = random.nextDouble() * 1.5 + 0.3;
                 double offsetZ = (random.nextDouble() - 0.5) * 0.6;
-                // LARGE_SMOKE for heavy black gas effect
                 double speedX = (random.nextDouble() - 0.5) * 0.15;
                 double speedY = random.nextDouble() * 0.05 + 0.02;
                 double speedZ = (random.nextDouble() - 0.5) * 0.15;
                 level.addParticle(ParticleTypes.LARGE_SMOKE, x + offsetX, y + offsetY, z + offsetZ, speedX, speedY, speedZ);
             }
-            // Extra squid ink particles for heavier effect
+            // イカ墨パーティクルで重量感を追加
             for (int i = 0; i < 3; i++) {
                 double offsetX = (random.nextDouble() - 0.5) * 0.4;
                 double offsetY = random.nextDouble() * 1.2 + 0.5;
@@ -79,13 +73,11 @@ public class ClientPacketHandler {
                 level.addParticle(ParticleTypes.SQUID_INK, x + offsetX, y + offsetY, z + offsetZ, speedX, speedY, speedZ);
             }
         } else if (type == 2) {
-            // Light gas - ふわふわ (floating) effect for sustained/small consumption
-            // Gentle floating black wisps
+            // 軽ガス - 持続・少量消費時のふわふわエフェクト
             for (int i = 0; i < 2; i++) {
                 double offsetX = (random.nextDouble() - 0.5) * 0.5;
                 double offsetY = random.nextDouble() * 1.5 + 0.2;
                 double offsetZ = (random.nextDouble() - 0.5) * 0.5;
-                // SMOKE for lighter gas effect
                 double speedX = (random.nextDouble() - 0.5) * 0.03;
                 double speedY = random.nextDouble() * 0.05 + 0.01;
                 double speedZ = (random.nextDouble() - 0.5) * 0.03;
@@ -100,7 +92,7 @@ public class ClientPacketHandler {
         if (level != null) {
             Random random = new Random();
 
-            // Explosion particles
+            // 爆発パーティクル
             for (int i = 0; i < 50; i++) {
                 double offsetX = (random.nextDouble() - 0.5) * 2;
                 double offsetY = (random.nextDouble() - 0.5) * 2;
@@ -108,7 +100,7 @@ public class ClientPacketHandler {
                 level.addParticle(ParticleTypes.EXPLOSION, x + offsetX, y + offsetY + 1, z + offsetZ, 0, 0, 0);
             }
 
-            // White glowing particles
+            // 白色発光パーティクル
             for (int i = 0; i < 100; i++) {
                 double offsetX = (random.nextDouble() - 0.5) * 3;
                 double offsetY = random.nextDouble() * 2;
@@ -119,13 +111,14 @@ public class ClientPacketHandler {
                 level.addParticle(ParticleTypes.END_ROD, x + offsetX, y + offsetY, z + offsetZ, speedX, speedY, speedZ);
             }
 
-            // White beam going up to build limit (vertical line effect)
-            double maxHeight = 320 - y;
+            // ワールドの建築限界高度までの白色ビーム
+            int maxBuildHeight = level.getMaxBuildHeight();
+            double maxHeight = maxBuildHeight - y;
             for (double height = 0; height < maxHeight; height += 0.5) {
                 level.addParticle(ParticleTypes.END_ROD, x, y + height, z, 0, 0.1, 0);
             }
 
-            // Flash effect
+            // フラッシュエフェクト
             for (int i = 0; i < 30; i++) {
                 double offsetX = (random.nextDouble() - 0.5) * 1;
                 double offsetZ = (random.nextDouble() - 0.5) * 1;

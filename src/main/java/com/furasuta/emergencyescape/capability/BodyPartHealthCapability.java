@@ -80,7 +80,7 @@ public class BodyPartHealthCapability implements INBTSerializable<CompoundTag> {
     public void setActive(boolean active) {
         this.isActive = active;
         if (active) {
-            // Reset health when activated
+            // 有効化時に体力をリセット
             this.maxHeadHealth = ModConfig.HEAD_MAX_HEALTH.get();
             this.maxBodyHealth = ModConfig.BODY_MAX_HEALTH.get();
             this.headHealth = maxHeadHealth;
@@ -88,10 +88,7 @@ public class BodyPartHealthCapability implements INBTSerializable<CompoundTag> {
         }
     }
 
-    /**
-     * Sync all values from server without resetting health.
-     * Used by client to receive server state.
-     */
+    // サーバーからの同期用
     public void syncFromServer(float headHealth, float bodyHealth, int maxHeadHealth, int maxBodyHealth, boolean isActive) {
         this.headHealth = headHealth;
         this.bodyHealth = bodyHealth;

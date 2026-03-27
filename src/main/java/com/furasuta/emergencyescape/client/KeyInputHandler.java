@@ -1,8 +1,8 @@
 package com.furasuta.emergencyescape.client;
 
 import com.furasuta.emergencyescape.EmergencyEscapeMod;
+import com.furasuta.emergencyescape.capability.BodyPartHealthCapability;
 import com.furasuta.emergencyescape.config.ModConfig;
-import com.furasuta.emergencyescape.event.EmergencyEscapeEventHandler;
 import com.furasuta.emergencyescape.network.NetworkHandler;
 import com.furasuta.emergencyescape.network.VoluntaryEscapePacket;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -39,12 +39,15 @@ public class KeyInputHandler {
     private static boolean wasKeyDown = false;
     private static boolean escapeTriggered = false;
 
-    // Track camera type to prevent perspective switching
-    private static CameraType lastCameraType = CameraType.FIRST_PERSON;
+    private static boolean isClientSystemActive() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return false;
+        return mc.player.getCapability(BodyPartHealthCapability.CAPABILITY)
+                .map(BodyPartHealthCapability::isActive).orElse(false);
+    }
 
     /**
-     * Use ClientTickEvent to continuously check key state while held.
-     * InputEvent.Key only fires on state changes, not while held.
+     * キー長押し判定のためClientTickEventで毎tick状態を確認する。
      */
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
@@ -52,20 +55,18 @@ public class KeyInputHandler {
 
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.screen != null) {
-            // Reset state when not in game
             keyPressStartTime = 0;
             wasKeyDown = false;
             escapeTriggered = false;
             return;
         }
 
-        // Check and reset camera type if player has escape item
-        checkAndResetCameraType();
+        // システム有効時はF5(視点切替)をブロック
+        if (isClientSystemActive()) {
+            checkAndResetCameraType();
+        }
 
-        Player player = mc.player;
-
-        // Check if player has emergency escape item
-        if (!EmergencyEscapeEventHandler.hasEmergencyEscapeItem(player)) {
+        if (!isClientSystemActive()) {
             keyPressStartTime = 0;
             wasKeyDown = false;
             escapeTriggered = false;
@@ -75,25 +76,21 @@ public class KeyInputHandler {
         boolean isKeyDown = ESCAPE_KEY.isDown();
 
         if (isKeyDown && !wasKeyDown) {
-            // Key just pressed
             keyPressStartTime = System.currentTimeMillis();
             escapeTriggered = false;
-            LOGGER.debug("[VoluntaryEscape] P key pressed, starting hold timer");
+            LOGGER.debug("[任意脱出] Pキー押下、長押しタイマー開始");
         } else if (isKeyDown && wasKeyDown && !escapeTriggered) {
-            // Key is being held
             long holdTime = System.currentTimeMillis() - keyPressStartTime;
             int requiredHoldTime = ModConfig.VOLUNTARY_ESCAPE_HOLD_TIME.get();
 
             if (holdTime >= requiredHoldTime) {
-                // Send packet to server
-                LOGGER.info("[VoluntaryEscape] Hold time reached ({}ms), sending escape request to server", holdTime);
+                LOGGER.info("[任意脱出] 長押し時間到達({}ms)、サーバーへ脱出リクエスト送信", holdTime);
                 NetworkHandler.CHANNEL.send(new VoluntaryEscapePacket(), PacketDistributor.SERVER.noArg());
-                escapeTriggered = true; // Prevent spam
+                escapeTriggered = true;
             }
         } else if (!isKeyDown && wasKeyDown) {
-            // Key released
             if (!escapeTriggered) {
-                LOGGER.debug("[VoluntaryEscape] P key released before hold time reached");
+                LOGGER.debug("[任意脱出] 長押し時間到達前にPキーが離された");
             }
             keyPressStartTime = 0;
             escapeTriggered = false;
@@ -112,42 +109,31 @@ public class KeyInputHandler {
     }
 
     /**
-     * Block F5 key (perspective toggle) when player has emergency escape item.
-     * Uses high priority to intercept before vanilla processing.
+     * システム有効時にF5キー（視点切り替え）をブロックする。
      */
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onKeyInput(InputEvent.Key event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.screen != null) return;
 
-        // Check if F5 key was pressed (perspective toggle)
         if (event.getKey() == GLFW.GLFW_KEY_F5 && event.getAction() == GLFW.GLFW_PRESS) {
-            // Check if player has emergency escape item
-            if (EmergencyEscapeEventHandler.hasEmergencyEscapeItem(mc.player)) {
-                // Store current camera type before it changes
-                lastCameraType = mc.options.getCameraType();
-                LOGGER.debug("[EmergencyEscape] F5 pressed with escape item - blocking perspective change");
+            if (isClientSystemActive()) {
+                LOGGER.debug("[脱出] F5押下 - 視点切り替えをブロック");
             }
         }
     }
 
     /**
-     * Additional check to reset camera if it somehow changed while having the escape item.
-     * This is called in the tick handler.
+     * システム有効中にカメラが一人称以外に変わった場合、強制的にリセットする。
      */
-    public static void checkAndResetCameraType() {
+    private static void checkAndResetCameraType() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
 
-        if (EmergencyEscapeEventHandler.hasEmergencyEscapeItem(mc.player)) {
-            CameraType currentType = mc.options.getCameraType();
-            if (currentType != CameraType.FIRST_PERSON) {
-                // Force back to first person
-                mc.options.setCameraType(CameraType.FIRST_PERSON);
-                LOGGER.debug("[EmergencyEscape] Reset camera to FIRST_PERSON (was: {})", currentType);
-            }
+        CameraType currentType = mc.options.getCameraType();
+        if (currentType != CameraType.FIRST_PERSON) {
+            mc.options.setCameraType(CameraType.FIRST_PERSON);
+            LOGGER.debug("[脱出] カメラを一人称に強制リセット (変更前: {})", currentType);
         }
-        // Update last camera type
-        lastCameraType = mc.options.getCameraType();
     }
 }

@@ -7,8 +7,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Tracks the last hit position and body part for entities.
- * Used to get accurate damage location from Mixin.
+ * エンティティの被弾位置と部位を追跡する。
+ * Mixinから正確なダメージ位置を取得するために使用。
  */
 public class HitPositionTracker {
 
@@ -29,13 +29,10 @@ public class HitPositionTracker {
         }
     }
 
-    // Map of entity UUID to last hit info
     private static final Map<UUID, HitInfo> lastHitInfo = new ConcurrentHashMap<>();
-
-    // Map of entity UUID to last damage timestamp (to expire old data)
     private static final Map<UUID, Long> hitTimestamps = new ConcurrentHashMap<>();
 
-    // Hit data expires after 100ms
+    /** ヒットデータの有効期限 (ms) */
     private static final long EXPIRY_TIME_MS = 100;
 
     public static void setLastHitInfo(UUID entityId, HitInfo info) {
@@ -48,7 +45,6 @@ public class HitPositionTracker {
         if (timestamp != null && System.currentTimeMillis() - timestamp < EXPIRY_TIME_MS) {
             return lastHitInfo.get(entityId);
         }
-        // Clear expired data
         lastHitInfo.remove(entityId);
         hitTimestamps.remove(entityId);
         return null;
@@ -59,7 +55,7 @@ public class HitPositionTracker {
         hitTimestamps.remove(entityId);
     }
 
-    // Legacy methods for compatibility
+    // 後方互換用メソッド
     public static void setLastHitPosition(UUID entityId, Vec3 position) {
         setLastHitInfo(entityId, new HitInfo(position, null, null, null, "legacy"));
     }

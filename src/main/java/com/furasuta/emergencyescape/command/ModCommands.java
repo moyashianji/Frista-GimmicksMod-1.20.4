@@ -2,11 +2,13 @@ package com.furasuta.emergencyescape.command;
 
 import com.furasuta.emergencyescape.EmergencyEscapeMod;
 import com.furasuta.emergencyescape.capability.BodyPartHealthCapability;
+import com.furasuta.emergencyescape.capability.DamageConsumptionCapability;
 import com.furasuta.emergencyescape.config.ModConfig;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -14,6 +16,9 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Collection;
+import java.util.Collections;
 
 @Mod.EventBusSubscriber(modid = EmergencyEscapeMod.MODID)
 public class ModCommands {
@@ -31,6 +36,16 @@ public class ModCommands {
                     .executes(ModCommands::reloadConfig))
                 .then(Commands.literal("config")
                     .executes(ModCommands::showConfig))
+                .then(Commands.literal("activate")
+                    .requires(source -> source.hasPermission(2))
+                    .executes(ctx -> activateSystem(ctx, null))
+                    .then(Commands.argument("targets", EntityArgument.players())
+                        .executes(ctx -> activateSystem(ctx, EntityArgument.getPlayers(ctx, "targets")))))
+                .then(Commands.literal("deactivate")
+                    .requires(source -> source.hasPermission(2))
+                    .executes(ctx -> deactivateSystem(ctx, null))
+                    .then(Commands.argument("targets", EntityArgument.players())
+                        .executes(ctx -> deactivateSystem(ctx, EntityArgument.getPlayers(ctx, "targets")))))
                 .then(Commands.literal("testcolor")
                     .requires(source -> source.hasPermission(2))
                     .executes(ModCommands::showColorThresholds)
@@ -49,7 +64,75 @@ public class ModCommands {
                     .then(Commands.literal("reset").executes(ModCommands::resetHealth)))
         );
 
-        LOGGER.info("[EmergencyEscape] Commands registered");
+        LOGGER.info("[EmergencyEscape] コマンド登録完了");
+    }
+
+    private static int activateSystem(CommandContext<CommandSourceStack> context, Collection<ServerPlayer> targets) {
+        CommandSourceStack source = context.getSource();
+
+        if (targets == null) {
+            ServerPlayer player = source.getPlayer();
+            if (player == null) {
+                source.sendFailure(Component.literal("§cプレイヤーのみ使用可能。対象を指定してください: /emergencyescape activate <プレイヤー>"));
+                return 0;
+            }
+            targets = Collections.singleton(player);
+        }
+
+        for (ServerPlayer target : targets) {
+            target.getCapability(BodyPartHealthCapability.CAPABILITY).ifPresent(cap -> {
+                if (cap.isActive()) {
+                    source.sendSuccess(() -> Component.literal(
+                        "§e" + target.getName().getString() + " の特殊体力は既に有効です"), false);
+                    return;
+                }
+                cap.setActive(true);
+                LOGGER.info("[EmergencyEscape] 特殊体力システム有効化: {}", target.getName().getString());
+            });
+
+            target.getCapability(DamageConsumptionCapability.CAPABILITY).ifPresent(cap -> {
+                cap.setActive(true);
+            });
+
+            source.sendSuccess(() -> Component.literal(
+                "§a" + target.getName().getString() + " の特殊体力システムを§b有効化§aしました (頭:"
+                + ModConfig.HEAD_MAX_HEALTH.get() + " 胴:" + ModConfig.BODY_MAX_HEALTH.get() + ")"), false);
+            target.sendSystemMessage(Component.literal("§a特殊体力システムが有効化されました"));
+        }
+
+        return 1;
+    }
+
+    private static int deactivateSystem(CommandContext<CommandSourceStack> context, Collection<ServerPlayer> targets) {
+        CommandSourceStack source = context.getSource();
+
+        if (targets == null) {
+            ServerPlayer player = source.getPlayer();
+            if (player == null) {
+                source.sendFailure(Component.literal("§cプレイヤーのみ使用可能。対象を指定してください: /emergencyescape deactivate <プレイヤー>"));
+                return 0;
+            }
+            targets = Collections.singleton(player);
+        }
+
+        for (ServerPlayer target : targets) {
+            target.getCapability(BodyPartHealthCapability.CAPABILITY).ifPresent(cap -> {
+                cap.setActive(false);
+                cap.reset();
+            });
+
+            target.getCapability(DamageConsumptionCapability.CAPABILITY).ifPresent(cap -> {
+                cap.clearAllTimers();
+                cap.setActive(false);
+            });
+
+            LOGGER.info("[EmergencyEscape] 特殊体力システム無効化: {}", target.getName().getString());
+            source.sendSuccess(() -> Component.literal(
+                "§a" + target.getName().getString() + " の特殊体力システムを§c無効化§aしました"), false);
+            target.sendSystemMessage(Component.literal("§c特殊体力システムが無効化されました"));
+        }
+
+        return 1;
     }
 
     private static int showColorThresholds(CommandContext<CommandSourceStack> context) {
@@ -68,7 +151,6 @@ public class ModCommands {
 
             source.sendSuccess(() -> Component.literal("§6=== ゲージ色テスト 閾値一覧 ==="), false);
 
-            // Head thresholds
             source.sendSuccess(() -> Component.literal("§e【頭】§f 現在: " + String.format("%.0f", headNow) + "/" + headMax
                 + " (" + String.format("%.1f", cap.getHeadHealthPercent()) + "%)"), false);
             source.sendSuccess(() -> Component.literal("  §b■ シアン §7: " + (int)(headMax * 0.70) + "～" + headMax + " (70%+)"), false);
@@ -77,7 +159,6 @@ public class ModCommands {
             source.sendSuccess(() -> Component.literal("  §c■ レッド §7: 1～" + (int)(headMax * 0.30 - 1) + " (1～29%)"), false);
             source.sendSuccess(() -> Component.literal("  §0■ ブラック §7: 0 (0%)"), false);
 
-            // Body thresholds
             source.sendSuccess(() -> Component.literal("§e【胴】§f 現在: " + String.format("%.0f", bodyNow) + "/" + bodyMax
                 + " (" + String.format("%.1f", cap.getBodyHealthPercent()) + "%)"), false);
             source.sendSuccess(() -> Component.literal("  §b■ シアン §7: " + (int)(bodyMax * 0.70) + "～" + bodyMax + " (70%+)"), false);
@@ -103,36 +184,35 @@ public class ModCommands {
 
         player.getCapability(BodyPartHealthCapability.CAPABILITY).ifPresent(cap -> {
             if (!cap.isActive()) {
-                source.sendFailure(Component.literal("§c緊急脱出アイテムをインベントリに入れてください"));
+                source.sendFailure(Component.literal("§c特殊体力システムが無効です。/emergencyescape activate で有効化してください"));
                 return;
             }
 
             int maxHealth = part.equals("head") ? cap.getMaxHeadHealth() : cap.getMaxBodyHealth();
             String partName = part.equals("head") ? "頭" : "胴";
 
-            // Calculate target health for each color (middle of the range)
             float targetHealth;
             String colorName;
             String colorCode;
             switch (color) {
                 case "cyan":
-                    targetHealth = maxHealth * 0.85f; // 85% - middle of 70-100%
+                    targetHealth = maxHealth * 0.85f;
                     colorName = "シアン";
                     colorCode = "§b";
                     break;
                 case "yellow":
-                    targetHealth = maxHealth * 0.60f; // 60% - middle of 50-69%
+                    targetHealth = maxHealth * 0.60f;
                     colorName = "イエロー";
                     colorCode = "§e";
                     break;
                 case "orange":
-                    targetHealth = maxHealth * 0.40f; // 40% - middle of 30-49%
+                    targetHealth = maxHealth * 0.40f;
                     colorName = "オレンジ";
                     colorCode = "§6";
                     break;
                 case "red":
-                    targetHealth = maxHealth * 0.15f; // 15% - middle of 1-29%
-                    targetHealth = Math.max(1, targetHealth); // At least 1 to avoid triggering escape
+                    targetHealth = maxHealth * 0.15f;
+                    targetHealth = Math.max(1, targetHealth);
                     colorName = "レッド";
                     colorCode = "§c";
                     break;
@@ -146,7 +226,6 @@ public class ModCommands {
                     return;
             }
 
-            // Set the health
             if (part.equals("head")) {
                 cap.setHeadHealth(targetHealth);
             } else {
@@ -194,7 +273,7 @@ public class ModCommands {
             context.getSource().sendSuccess(() ->
                 Component.literal("§a[EmergencyEscape] 設定をリロードしました"), true);
 
-            LOGGER.info("[EmergencyEscape] Config reloaded:");
+            LOGGER.info("[EmergencyEscape] 設定リロード完了:");
             LOGGER.info("  - LARGE_DAMAGE_THRESHOLD: {}", ModConfig.LARGE_DAMAGE_THRESHOLD.get());
             LOGGER.info("  - ESCAPE_DEATH_DELAY: {}", ModConfig.ESCAPE_DEATH_DELAY.get());
             LOGGER.info("  - VOLUNTARY_ESCAPE_RADIUS: {}", ModConfig.VOLUNTARY_ESCAPE_RADIUS.get());
@@ -207,7 +286,7 @@ public class ModCommands {
         } catch (Exception e) {
             context.getSource().sendFailure(
                 Component.literal("§c[EmergencyEscape] 設定のリロードに失敗しました: " + e.getMessage()));
-            LOGGER.error("[EmergencyEscape] Config reload failed", e);
+            LOGGER.error("[EmergencyEscape] 設定リロード失敗", e);
             return 0;
         }
     }

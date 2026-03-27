@@ -8,17 +8,12 @@ import net.minecraftforge.event.network.CustomPayloadEvent;
 import java.util.UUID;
 
 /**
- * Packet to sync PlayerModel part positions and rotations from client to server.
- * This allows the server to have accurate hitbox data based on the actual model pose.
- *
- * Synced parts: HEAD, BODY, LEFT_ARM, RIGHT_ARM, LEFT_LEG, RIGHT_LEG
- * Each part has: x, y, z position offset and xRot, yRot, zRot rotation
+ * プレイヤーモデルの各部位の位置・回転をクライアントからサーバーへ同期するパケット。
+ * 部位: HEAD, BODY, LEFT_ARM, RIGHT_ARM, LEFT_LEG, RIGHT_LEG
+ * 各部位: x, y, z, xRot, yRot, zRot (6部位 x 6値 = 36 float)
  */
 public class SyncModelPartPacket {
 
-    // Part data arrays (6 parts × 6 values each = 36 floats total)
-    // Order: HEAD, BODY, LEFT_ARM, RIGHT_ARM, LEFT_LEG, RIGHT_LEG
-    // Each part: [x, y, z, xRot, yRot, zRot]
     private final float[] partData;
 
     public SyncModelPartPacket(float[] partData) {
@@ -26,7 +21,6 @@ public class SyncModelPartPacket {
     }
 
     public static void encode(SyncModelPartPacket packet, FriendlyByteBuf buf) {
-        // Write all 36 floats
         for (float value : packet.partData) {
             buf.writeFloat(value);
         }
@@ -45,7 +39,6 @@ public class SyncModelPartPacket {
             ServerPlayer player = ctx.getSender();
             if (player == null) return;
 
-            // Store the part data in the cache
             PlayerModelPartCache.updatePlayerParts(player.getUUID(), packet.partData);
         });
         ctx.setPacketHandled(true);
@@ -55,9 +48,7 @@ public class SyncModelPartPacket {
         return partData;
     }
 
-    /**
-     * Helper class to build the packet data from individual part values.
-     */
+    /** 各部位の値からパケットデータを組み立てるビルダー */
     public static class Builder {
         private final float[] data = new float[36];
 

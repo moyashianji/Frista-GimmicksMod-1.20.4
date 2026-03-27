@@ -21,7 +21,6 @@ public class VoluntaryEscapePacket {
     }
 
     public static void encode(VoluntaryEscapePacket packet, FriendlyByteBuf buf) {
-        // No data needed
     }
 
     public static VoluntaryEscapePacket decode(FriendlyByteBuf buf) {
@@ -38,14 +37,12 @@ public class VoluntaryEscapePacket {
 
             LOGGER.info("[VoluntaryEscape] Received escape request from player: {}", player.getName().getString());
 
-            // Check if player has emergency escape item
-            if (!EmergencyEscapeEventHandler.hasEmergencyEscapeItem(player)) {
-                LOGGER.info("[VoluntaryEscape] Denied: Player does not have emergency escape item");
-                player.sendSystemMessage(Component.literal("§c緊急脱出失敗: 緊急脱出アイテムを持っていません"));
+            if (!EmergencyEscapeEventHandler.isSystemActive(player)) {
+                LOGGER.info("[VoluntaryEscape] Denied: System is not active for player");
+                player.sendSystemMessage(Component.literal("§c緊急脱出失敗: 特殊体力システムが有効化されていません"));
                 return;
             }
 
-            // Check if player is already escaping
             player.getCapability(EmergencyEscapeCapability.CAPABILITY).ifPresent(cap -> {
                 if (cap.isEscaping()) {
                     LOGGER.info("[VoluntaryEscape] Denied: Player is already escaping");
@@ -53,7 +50,6 @@ public class VoluntaryEscapePacket {
                     return;
                 }
 
-                // Check if enemy players are nearby
                 if (isEnemyPlayerNearby(player)) {
                     int radius = ModConfig.VOLUNTARY_ESCAPE_RADIUS.get();
                     LOGGER.info("[VoluntaryEscape] Denied: Enemy player is nearby (within {} blocks)", radius);
@@ -61,7 +57,6 @@ public class VoluntaryEscapePacket {
                     return;
                 }
 
-                // Trigger voluntary escape
                 LOGGER.info("[VoluntaryEscape] Triggering voluntary escape for player: {}", player.getName().getString());
                 EmergencyEscapeEventHandler.triggerEmergencyEscape(player);
             });
@@ -82,7 +77,7 @@ public class VoluntaryEscapePacket {
         for (ServerPlayer nearbyPlayer : nearbyPlayers) {
             PlayerTeam nearbyTeam = nearbyPlayer.getTeam();
 
-            // If either player has no team, or they are on different teams
+            // チームなし、または別チームなら敵とみなす
             if (playerTeam == null || nearbyTeam == null || !playerTeam.equals(nearbyTeam)) {
                 return true;
             }

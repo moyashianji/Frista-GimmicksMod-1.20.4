@@ -29,30 +29,19 @@ public class EmergencyEscapeMod {
     public EmergencyEscapeMod() {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
 
-        // Register config
         ModLoadingContext.get().registerConfig(Type.COMMON, ModConfig.SPEC);
-
-        // Register items and sounds
         ModItems.register(modEventBus);
         ModSounds.register(modEventBus);
-
-        // Register setup methods
         modEventBus.addListener(this::commonSetup);
 
-        // Register capabilities
         modEventBus.addListener(BodyPartHealthCapability::register);
         modEventBus.addListener(DamageConsumptionCapability::register);
         modEventBus.addListener(EmergencyEscapeCapability::register);
 
-        // Register ourselves for server and other game events
         MinecraftForge.EVENT_BUS.register(this);
-
-        // Client setup
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
             modEventBus.addListener(ClientSetup::init);
         });
-
-        LOGGER.info("Emergency Escape Mod initialized");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {

@@ -20,14 +20,12 @@ public abstract class LivingEntityMixin {
     private static final Logger LOGGER = LoggerFactory.getLogger("EmergencyEscape-HitDetection");
 
     /**
-     * Captures the hit position and determines the body part when an entity takes damage.
-     * This runs before the actual damage is applied, so we can track where the hit occurred.
+     * ダメージ適用前にヒット位置と被弾部位を記録する。
      */
     @Inject(method = "hurt", at = @At("HEAD"))
     private void onHurt(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
         LivingEntity self = (LivingEntity) (Object) this;
 
-        // Only track for players
         if (!(self instanceof Player player)) {
             return;
         }
@@ -38,58 +36,77 @@ public abstract class LivingEntityMixin {
         BodyPartHitbox.BodyPart bodyPart = null;
         String hitSource = "unknown";
 
-        // Try to get hit position from projectile
+        // 飛び道具によるヒット - 軌道とプレイヤーBBの交点でポイントベース判定
         if (source.getDirectEntity() instanceof Projectile projectile) {
-            // Use projectile's current position as hit location
-            // This is the ACTUAL position where the arrow/projectile hit the player
-            // This is more accurate than raycast from shooter because:
-            // 1. The shooter may have moved/rotated since firing
-            // 2. Projectiles follow curved paths (gravity)
-            // 3. The player may have moved since the projectile was fired
-            hitPosition = projectile.position();
-            hitSource = "projectile_position:" + projectile.getType().toShortString();
+            Vec3 projPos = projectile.position();
+            Vec3 projMotion = projectile.getDeltaMovement();
 
-            // Calculate body part from projectile's actual position (use pose-aware method)
+            // DeltaMovementから前tick位置を逆算し、軌道がプレイヤーBBに
+            // 入った交点（実際の着弾位置）を求めてポイントベースで部位判定する。
+            // レイキャスト方式だと上からの角度で頭が優先されるため使わない。
+            hitPosition = projPos;
+            hitSource = "projectile:" + projectile.getType().toShortString();
+
+            if (projMotion.lengthSqr() > 0.001) {
+                Vec3 prevPos = projPos.subtract(projMotion);
+                Vec3 trajectoryDir = projMotion.normalize();
+                attackOrigin = prevPos;
+                attackDirection = trajectoryDir;
+
+                // 前tick位置がプレイヤーBB外なら、軌道とBBの交点を着弾位置とする
+                net.minecraft.world.phys.AABB playerBox = player.getBoundingBox().inflate(0.3);
+                if (!playerBox.contains(prevPos)) {
+                    Vec3 rayEnd = prevPos.add(trajectoryDir.scale(20));
+                    java.util.Optional<Vec3> intersection = playerBox.clip(prevPos, rayEnd);
+                    if (intersection.isPresent()) {
+                        hitPosition = intersection.get();
+                        hitSource = "projectile_intersection:" + projectile.getType().toShortString();
+                    }
+                }
+            } else {
+                attackOrigin = projPos;
+                attackDirection = new Vec3(0, 0, 0);
+            }
+
+            // ポイントベースで部位判定（レイキャストではなく交点座標で判定）
             bodyPart = BodyPartHitbox.getBodyPartAtPointWithPose(player, hitPosition);
 
-            // Log projectile position and player bounds for debugging
+            if (bodyPart == BodyPartHitbox.BodyPart.NONE) {
+                // フォールバック: 現在位置で再判定
+                bodyPart = BodyPartHitbox.getBodyPartAtPointWithPose(player, projPos);
+                hitSource = "projectile_point_fallback:" + projectile.getType().toShortString();
+            }
+
             double playerY = player.getY();
             double playerHeight = player.getBbHeight();
             double relativeY = (hitPosition.y - playerY) / playerHeight;
 
-            LOGGER.debug("[HitDetect] Projectile hit: Y={}, PlayerY={}, Height={}, RelativeY={}%, BodyPart={}",
+            LOGGER.debug("[HitDetect] Projectile hit: HitY={}, ProjY={}, PlayerY={}, Height={}, RelativeY={}%, BodyPart={}",
                 String.format("%.2f", hitPosition.y),
+                String.format("%.2f", projPos.y),
                 String.format("%.2f", playerY),
                 String.format("%.2f", playerHeight),
                 String.format("%.1f", relativeY * 100),
                 bodyPart);
 
-            // Store attack info for reference (but DON'T override bodyPart with raycast)
-            if (source.getEntity() != null) {
-                attackOrigin = source.getEntity().getEyePosition();
-                attackDirection = projectile.getDeltaMovement().normalize();
-            }
-
             if (BodyPartHitbox.hasSyncedPoseData(player)) {
                 hitSource += "_pose_synced";
             }
         }
-        // For melee attacks, use attacker's look vector for raycast
+        // 近接攻撃：攻撃者の視線方向でレイキャスト
         else if (source.getEntity() != null) {
             var attacker = source.getEntity();
             attackOrigin = attacker.getEyePosition();
             attackDirection = attacker.getLookAngle();
             hitSource = "melee:" + attacker.getType().toShortString();
 
-            // Perform raycast to find which body part was hit (use pose-aware method)
             bodyPart = BodyPartHitbox.getHitBodyPartWithPose(player, attackOrigin, attackDirection);
 
             if (bodyPart == BodyPartHitbox.BodyPart.NONE) {
-                // Fallback: estimate based on distance and height
+                // フォールバック：距離と高さから推定
                 double distance = attackOrigin.distanceTo(player.position().add(0, player.getBbHeight() / 2, 0));
                 hitPosition = attackOrigin.add(attackDirection.scale(Math.min(distance, 5)));
 
-                // Clamp to player bounds
                 double minY = player.getY();
                 double maxY = player.getY() + player.getBbHeight();
                 if (hitPosition.y < minY) {
@@ -101,7 +118,6 @@ public abstract class LivingEntityMixin {
                 bodyPart = BodyPartHitbox.getBodyPartAtPointWithPose(player, hitPosition);
                 hitSource = "melee_fallback:" + attacker.getType().toShortString();
             } else {
-                // Calculate approximate hit position from raycast
                 hitPosition = attackOrigin.add(attackDirection.scale(
                     attackOrigin.distanceTo(player.position().add(0, player.getBbHeight() / 2, 0))
                 ));
@@ -110,22 +126,18 @@ public abstract class LivingEntityMixin {
                 }
             }
         }
-        // For damage without a direct source (explosion, environment, etc.)
+        // 発生源座標があるダメージ（爆発など）
         else if (source.getSourcePosition() != null) {
-            // Use source position for explosions, etc.
             Vec3 sourcePos = source.getSourcePosition();
             hitSource = "source_position:" + source.type().msgId();
 
-            // Direction from source to player center
             Vec3 playerCenter = player.position().add(0, player.getBbHeight() / 2, 0);
             attackDirection = playerCenter.subtract(sourcePos).normalize();
             attackOrigin = sourcePos;
 
-            // Raycast from source to player (use pose-aware method)
             bodyPart = BodyPartHitbox.getHitBodyPartWithPose(player, attackOrigin, attackDirection);
 
             if (bodyPart == BodyPartHitbox.BodyPart.NONE) {
-                // Default to body for explosions
                 bodyPart = BodyPartHitbox.BodyPart.BODY;
                 hitSource = "explosion_default:" + source.type().msgId();
             } else if (BodyPartHitbox.hasSyncedPoseData(player)) {
@@ -134,52 +146,42 @@ public abstract class LivingEntityMixin {
 
             hitPosition = playerCenter;
         }
-        // Fallback for damage types without source position (fall damage, suffocation, void, etc.)
+        // 発生源座標のないダメージ（落下、窒息、奈落など）
         else {
             hitSource = "environmental:" + source.type().msgId();
             Vec3 playerCenter = player.position().add(0, player.getBbHeight() / 2, 0);
             hitPosition = playerCenter;
 
-            // Determine body part based on damage type
             String damageType = source.type().msgId();
             if (damageType.contains("fall") || damageType.contains("flyIntoWall")) {
-                // Fall damage affects legs primarily
                 bodyPart = BodyPartHitbox.BodyPart.LEGS;
                 hitSource = "fall_damage:" + damageType;
             } else if (damageType.contains("drown") || damageType.contains("suffocate") || damageType.contains("inWall")) {
-                // Suffocation/drowning affects body
                 bodyPart = BodyPartHitbox.BodyPart.BODY;
                 hitSource = "suffocation:" + damageType;
             } else if (damageType.contains("lava") || damageType.contains("inFire") || damageType.contains("onFire")
                     || damageType.contains("hotFloor") || damageType.contains("freeze")) {
-                // Fire/temperature damage affects body
                 bodyPart = BodyPartHitbox.BodyPart.BODY;
                 hitSource = "temperature:" + damageType;
             } else if (damageType.contains("cactus") || damageType.contains("sweetBerry") || damageType.contains("stalagmite")) {
-                // Ground hazards affect legs
                 bodyPart = BodyPartHitbox.BodyPart.LEGS;
                 hitSource = "ground_hazard:" + damageType;
             } else if (damageType.contains("anvil") || damageType.contains("fallingBlock") || damageType.contains("fallingStalactite")) {
-                // Falling objects affect head
                 bodyPart = BodyPartHitbox.BodyPart.HEAD;
                 hitSource = "falling_object:" + damageType;
             } else if (damageType.contains("lightningBolt")) {
-                // Lightning affects head
                 bodyPart = BodyPartHitbox.BodyPart.HEAD;
                 hitSource = "lightning:" + damageType;
             } else if (damageType.contains("starve") || damageType.contains("wither") || damageType.contains("magic")
                     || damageType.contains("poison") || damageType.contains("generic") || damageType.contains("outOfWorld")) {
-                // Status effects, generic, and void damage affect body
                 bodyPart = BodyPartHitbox.BodyPart.BODY;
                 hitSource = "status_effect:" + damageType;
             } else {
-                // Default to body for unknown damage types
                 bodyPart = BodyPartHitbox.BodyPart.BODY;
                 hitSource = "unknown_environmental:" + damageType;
             }
         }
 
-        // Store the hit info (bodyPart is always set now)
         HitPositionTracker.setLastHitInfo(
             player.getUUID(),
             new HitPositionTracker.HitInfo(hitPosition, attackOrigin, attackDirection, bodyPart, hitSource)

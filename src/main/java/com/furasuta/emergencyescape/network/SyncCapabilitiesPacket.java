@@ -14,12 +14,10 @@ public class SyncCapabilitiesPacket {
     private final boolean isActive;
     private final boolean isEscaping;
     private final int escapeTicksRemaining;
-    private final boolean hasItem;
-    private final int gasParticleType; // 0=none, 1=heavy(large instant), 2=light(other consumption)
+    private final boolean systemActive; // コマンドで有効化されたシステムの状態
 
     public SyncCapabilitiesPacket(float headHealth, float bodyHealth, int maxHeadHealth, int maxBodyHealth,
-                                   boolean isActive, boolean isEscaping, int escapeTicksRemaining, boolean hasItem,
-                                   int gasParticleType) {
+                                   boolean isActive, boolean isEscaping, int escapeTicksRemaining, boolean systemActive) {
         this.headHealth = headHealth;
         this.bodyHealth = bodyHealth;
         this.maxHeadHealth = maxHeadHealth;
@@ -27,8 +25,7 @@ public class SyncCapabilitiesPacket {
         this.isActive = isActive;
         this.isEscaping = isEscaping;
         this.escapeTicksRemaining = escapeTicksRemaining;
-        this.hasItem = hasItem;
-        this.gasParticleType = gasParticleType;
+        this.systemActive = systemActive;
     }
 
     public static void encode(SyncCapabilitiesPacket packet, FriendlyByteBuf buf) {
@@ -39,8 +36,7 @@ public class SyncCapabilitiesPacket {
         buf.writeBoolean(packet.isActive);
         buf.writeBoolean(packet.isEscaping);
         buf.writeInt(packet.escapeTicksRemaining);
-        buf.writeBoolean(packet.hasItem);
-        buf.writeInt(packet.gasParticleType);
+        buf.writeBoolean(packet.systemActive);
     }
 
     public static SyncCapabilitiesPacket decode(FriendlyByteBuf buf) {
@@ -52,8 +48,7 @@ public class SyncCapabilitiesPacket {
                 buf.readBoolean(),
                 buf.readBoolean(),
                 buf.readInt(),
-                buf.readBoolean(),
-                buf.readInt()
+                buf.readBoolean()
         );
     }
 
@@ -64,8 +59,7 @@ public class SyncCapabilitiesPacket {
                         packet.headHealth, packet.bodyHealth,
                         packet.maxHeadHealth, packet.maxBodyHealth,
                         packet.isActive, packet.isEscaping,
-                        packet.escapeTicksRemaining, packet.hasItem,
-                        packet.gasParticleType
+                        packet.escapeTicksRemaining, packet.systemActive
                 );
             });
         });

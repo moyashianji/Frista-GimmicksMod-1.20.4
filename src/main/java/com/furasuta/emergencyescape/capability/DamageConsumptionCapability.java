@@ -33,14 +33,10 @@ public class DamageConsumptionCapability implements INBTSerializable<CompoundTag
         event.register(DamageConsumptionCapability.class);
     }
 
-    /**
-     * Add a new consumption timer. All timers stack (no refresh).
-     * Multiple attacks = more level consumption.
-     */
+    // タイマーを追加（スタック式）
     public void addConsumption(boolean isLargeDamage, boolean isInstant, int durationTicks, int intervalTicks, int amount) {
         String timerType = (isLargeDamage ? "Large" : "Small") + (isInstant ? "/Instant" : "/Sustained");
 
-        // Always add a new timer - stacking allows more consumption with more attacks
         ConsumptionTimer timer = new ConsumptionTimer(isLargeDamage, isInstant, durationTicks, intervalTicks, amount);
         activeTimers.add(timer);
 
@@ -62,7 +58,6 @@ public class DamageConsumptionCapability implements INBTSerializable<CompoundTag
             ConsumptionTimer timer = iterator.next();
             timer.tick();
 
-            // Debug: Log timer state every 20 ticks (1 second)
             if (timer.getRemainingDuration() % 20 == 0 && timer.getRemainingDuration() > 0) {
                 String timerType = (timer.isLargeDamage() ? "Large" : "Small") +
                                    (timer.isInstant() ? "/Instant" : "/Sustained");
@@ -77,10 +72,9 @@ public class DamageConsumptionCapability implements INBTSerializable<CompoundTag
                 if (currentLevel > 0 && levelsToConsume > 0) {
                     int newLevel = currentLevel - levelsToConsume;
 
-                    // Use giveExperienceLevels with negative value to properly sync to client
+                    // 負の値でクライアントに同期
                     player.giveExperienceLevels(-levelsToConsume);
 
-                    // Log level change
                     String timerType = (timer.isLargeDamage() ? "Large" : "Small") +
                                        (timer.isInstant() ? "/Instant" : "/Sustained");
                     LOGGER.info("[EmergencyEscape] Level consumed: {} -> {} (-{}) [{}] remaining={}ticks({}s) interval={}/{} Player: {}",
@@ -89,7 +83,6 @@ public class DamageConsumptionCapability implements INBTSerializable<CompoundTag
                         timer.getCurrentIntervalTicks(), timer.getIntervalTicks(),
                         player.getName().getString());
                 }
-                // Always reset interval after consumption check
                 timer.resetInterval();
             }
 
@@ -117,10 +110,6 @@ public class DamageConsumptionCapability implements INBTSerializable<CompoundTag
         }
     }
 
-    /**
-     * Get player's current experience level.
-     * Used for emergency escape trigger check (level 0 = escape).
-     */
     public static int getPlayerLevel(Player player) {
         return player.experienceLevel;
     }
@@ -184,13 +173,9 @@ public class DamageConsumptionCapability implements INBTSerializable<CompoundTag
             currentIntervalTicks = 0;
         }
 
-        /**
-         * Refresh this timer by resetting its duration.
-         * This is called when the same type of damage is received again.
-         */
         public void refresh(int newDurationTicks) {
             this.remainingDuration = newDurationTicks;
-            // Don't reset currentIntervalTicks - let the current interval continue
+            // currentIntervalTicksは継続させる
         }
 
         public boolean isExpired() {

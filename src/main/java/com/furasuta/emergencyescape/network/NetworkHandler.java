@@ -28,6 +28,12 @@ public class NetworkHandler {
                 .consumerMainThread(SpawnParticlesPacket::handle)
                 .add();
 
+        CHANNEL.messageBuilder(SpawnGasParticlesPacket.class, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(SpawnGasParticlesPacket::encode)
+                .decoder(SpawnGasParticlesPacket::decode)
+                .consumerMainThread(SpawnGasParticlesPacket::handle)
+                .add();
+
         CHANNEL.messageBuilder(VoluntaryEscapePacket.class, NetworkDirection.PLAY_TO_SERVER)
                 .encoder(VoluntaryEscapePacket::encode)
                 .decoder(VoluntaryEscapePacket::decode)
