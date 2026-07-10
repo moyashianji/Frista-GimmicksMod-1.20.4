@@ -15,9 +15,11 @@ public class SyncCapabilitiesPacket {
     private final boolean isEscaping;
     private final int escapeTicksRemaining;
     private final boolean systemActive; // コマンドで有効化されたシステムの状態
+    private final float legDamageAccum; // 足ダメージの累積（加算デバフの表示用）
 
     public SyncCapabilitiesPacket(float headHealth, float bodyHealth, int maxHeadHealth, int maxBodyHealth,
-                                   boolean isActive, boolean isEscaping, int escapeTicksRemaining, boolean systemActive) {
+                                   boolean isActive, boolean isEscaping, int escapeTicksRemaining, boolean systemActive,
+                                   float legDamageAccum) {
         this.headHealth = headHealth;
         this.bodyHealth = bodyHealth;
         this.maxHeadHealth = maxHeadHealth;
@@ -26,6 +28,7 @@ public class SyncCapabilitiesPacket {
         this.isEscaping = isEscaping;
         this.escapeTicksRemaining = escapeTicksRemaining;
         this.systemActive = systemActive;
+        this.legDamageAccum = legDamageAccum;
     }
 
     public static void encode(SyncCapabilitiesPacket packet, FriendlyByteBuf buf) {
@@ -37,6 +40,7 @@ public class SyncCapabilitiesPacket {
         buf.writeBoolean(packet.isEscaping);
         buf.writeInt(packet.escapeTicksRemaining);
         buf.writeBoolean(packet.systemActive);
+        buf.writeFloat(packet.legDamageAccum);
     }
 
     public static SyncCapabilitiesPacket decode(FriendlyByteBuf buf) {
@@ -48,7 +52,8 @@ public class SyncCapabilitiesPacket {
                 buf.readBoolean(),
                 buf.readBoolean(),
                 buf.readInt(),
-                buf.readBoolean()
+                buf.readBoolean(),
+                buf.readFloat()
         );
     }
 
@@ -59,7 +64,8 @@ public class SyncCapabilitiesPacket {
                         packet.headHealth, packet.bodyHealth,
                         packet.maxHeadHealth, packet.maxBodyHealth,
                         packet.isActive, packet.isEscaping,
-                        packet.escapeTicksRemaining, packet.systemActive
+                        packet.escapeTicksRemaining, packet.systemActive,
+                        packet.legDamageAccum
                 );
             });
         });

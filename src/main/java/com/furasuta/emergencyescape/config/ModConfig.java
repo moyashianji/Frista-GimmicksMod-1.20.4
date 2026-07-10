@@ -53,6 +53,29 @@ public class ModConfig {
     // リスポーン設定
     public static final ForgeConfigSpec.IntValue RESPAWN_LEVEL;
 
+    // 足ダメージ加算デバフ設定
+    public static final ForgeConfigSpec.BooleanValue LEG_BONUS_ENABLED;
+    public static final ForgeConfigSpec.IntValue LEG_BONUS1_THRESHOLD;
+    public static final ForgeConfigSpec.IntValue LEG_BONUS2_THRESHOLD;
+    public static final ForgeConfigSpec.IntValue LEG_SPEED_SAMPLE_INTERVAL;
+    public static final ForgeConfigSpec.IntValue LEG_BONUS_CONSUME_INTERVAL;
+    public static final ForgeConfigSpec.IntValue LEG_RANK_HOLD_TICKS;
+    public static final ForgeConfigSpec.DoubleValue LEG_LARGE_FALL_DISTANCE;
+    public static final ForgeConfigSpec.DoubleValue LEG_SPEED_T1;
+    public static final ForgeConfigSpec.DoubleValue LEG_SPEED_T2;
+    public static final ForgeConfigSpec.DoubleValue LEG_SPEED_T3;
+    public static final ForgeConfigSpec.DoubleValue LEG_SPEED_T4;
+    public static final ForgeConfigSpec.IntValue LEG_R1_AMOUNT1;
+    public static final ForgeConfigSpec.IntValue LEG_R2_AMOUNT1;
+    public static final ForgeConfigSpec.IntValue LEG_R3_AMOUNT1;
+    public static final ForgeConfigSpec.IntValue LEG_R4_AMOUNT1;
+    public static final ForgeConfigSpec.IntValue LEG_R5_AMOUNT1;
+    public static final ForgeConfigSpec.IntValue LEG_R1_AMOUNT2;
+    public static final ForgeConfigSpec.IntValue LEG_R2_AMOUNT2;
+    public static final ForgeConfigSpec.IntValue LEG_R3_AMOUNT2;
+    public static final ForgeConfigSpec.IntValue LEG_R4_AMOUNT2;
+    public static final ForgeConfigSpec.IntValue LEG_R5_AMOUNT2;
+
     // デバッグ設定
     public static final ForgeConfigSpec.BooleanValue DEBUG_MODE;
 
@@ -176,6 +199,54 @@ public class ModConfig {
         RESPAWN_LEVEL = BUILDER
                 .comment("リスポーン時に付与される経験値レベル")
                 .defineInRange("respawnLevel", 1000, 0, 21863);
+        BUILDER.pop();
+
+        BUILDER.comment("足ダメージ加算デバフ設定（足への累積ダメージで負傷し、移動速度に応じてレベルが余計に消費される）").push("legDamage");
+        LEG_BONUS_ENABLED = BUILDER
+                .comment("足ダメージ加算デバフを有効にする")
+                .define("enabled", true);
+        LEG_BONUS1_THRESHOLD = BUILDER
+                .comment("加算1になる足の累積ダメージ")
+                .defineInRange("bonus1Threshold", 5, 1, 1000);
+        LEG_BONUS2_THRESHOLD = BUILDER
+                .comment("加算2になる足の累積ダメージ（この値で頭打ち。以降は蓄積しない）")
+                .defineInRange("bonus2Threshold", 10, 1, 1000);
+        LEG_SPEED_SAMPLE_INTERVAL = BUILDER
+                .comment("移動速度をサンプリングする間隔（tick）")
+                .defineInRange("speedSampleIntervalTicks", 3, 1, 20);
+        LEG_BONUS_CONSUME_INTERVAL = BUILDER
+                .comment("加算消費を行う間隔（tick）")
+                .defineInRange("consumeIntervalTicks", 7, 1, 100);
+        LEG_RANK_HOLD_TICKS = BUILDER
+                .comment("速度ランクを維持する時間（tick）。一瞬の速度変化で消費がガタつかないようにする")
+                .defineInRange("rankHoldTicks", 40, 1, 200);
+        LEG_LARGE_FALL_DISTANCE = BUILDER
+                .comment("この落下距離（ブロック）を超える落下のみ、鉛直速度を速度判定に加える（階段等の誤検知防止）")
+                .defineInRange("largeFallDistance", 3.0, 0.0, 256.0);
+
+        BUILDER.comment("速度ランクの区切り（blocks/tick）。①<T1 / T1<=②<T2 / T2<=③<T3 / T3<=④<T4 / ⑤>=T4").push("speedBands");
+        LEG_SPEED_T1 = BUILDER.comment("ランク①(静止)とランク②(歩行)の境界").defineInRange("speedT1", 0.05, 0.0, 100.0);
+        LEG_SPEED_T2 = BUILDER.comment("ランク②とランク③の境界").defineInRange("speedT2", 0.15, 0.0, 100.0);
+        LEG_SPEED_T3 = BUILDER.comment("ランク③とランク④の境界").defineInRange("speedT3", 0.22, 0.0, 100.0);
+        LEG_SPEED_T4 = BUILDER.comment("ランク④とランク⑤(走行/大落下)の境界").defineInRange("speedT4", 0.30, 0.0, 100.0);
+        BUILDER.pop();
+
+        BUILDER.comment("加算1時の速度ランク別・消費レベル（consumeIntervalTicks毎）").push("consumeBonus1");
+        LEG_R1_AMOUNT1 = BUILDER.comment("ランク①(静止)").defineInRange("rank1", 0, 0, 1000);
+        LEG_R2_AMOUNT1 = BUILDER.comment("ランク②(歩行)").defineInRange("rank2", 1, 0, 1000);
+        LEG_R3_AMOUNT1 = BUILDER.comment("ランク③").defineInRange("rank3", 3, 0, 1000);
+        LEG_R4_AMOUNT1 = BUILDER.comment("ランク④").defineInRange("rank4", 4, 0, 1000);
+        LEG_R5_AMOUNT1 = BUILDER.comment("ランク⑤(走行/大落下)").defineInRange("rank5", 6, 0, 1000);
+        BUILDER.pop();
+
+        BUILDER.comment("加算2時の速度ランク別・消費レベル（consumeIntervalTicks毎）").push("consumeBonus2");
+        LEG_R1_AMOUNT2 = BUILDER.comment("ランク①(静止)").defineInRange("rank1", 0, 0, 1000);
+        LEG_R2_AMOUNT2 = BUILDER.comment("ランク②(歩行)").defineInRange("rank2", 2, 0, 1000);
+        LEG_R3_AMOUNT2 = BUILDER.comment("ランク③").defineInRange("rank3", 5, 0, 1000);
+        LEG_R4_AMOUNT2 = BUILDER.comment("ランク④").defineInRange("rank4", 6, 0, 1000);
+        LEG_R5_AMOUNT2 = BUILDER.comment("ランク⑤(走行/大落下)").defineInRange("rank5", 8, 0, 1000);
+        BUILDER.pop();
+
         BUILDER.pop();
 
         BUILDER.comment("デバッグ設定").push("debug");

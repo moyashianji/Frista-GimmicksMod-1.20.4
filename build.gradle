@@ -63,6 +63,10 @@ minecraft {
         configureEach {
             workingDirectory project.file('run')
 
+            // Low free RAM on this machine makes the default (huge) heap unstable
+            // and triggers intermittent Guava ClassNotFound on connect. Cap it.
+            jvmArgs '-Xmx2G', '-Xms1G'
+
             // Recommended logging data for a userdev environment
             // The markers can be added/remove as needed separated by commas.
             // "SCAN": For mods scan.
@@ -79,9 +83,20 @@ minecraft {
         client {
             // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
             property 'forge.enabledGameTestNamespaces', mod_id
+            // username defaults to "Dev" in ForgeGradle dev env
+        }
+
+        // Second client for PvP testing. Inherit the client run type (main class etc.)
+        // via parent, then override the working dir and username.
+        client2 {
+            parent runs.client
+            workingDirectory project.file('run-client2')
+            args '--username', 'Dev2'
         }
 
         server {
+            // Dedicated server in its own dir so it doesn't fight the client over run/
+            workingDirectory project.file('run-server')
             property 'forge.enabledGameTestNamespaces', mod_id
             args '--nogui'
         }

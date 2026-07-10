@@ -322,6 +322,16 @@ public class ModCommands {
         source.sendSuccess(() -> Component.literal("§7持続消費: §f" + (ModConfig.SMALL_DAMAGE_SUSTAINED_ENABLED.get() ? "ON" : "OFF") +
             " (時間:" + ModConfig.SMALL_DAMAGE_SUSTAINED_DURATION.get() + "s, 間隔:" + ModConfig.SMALL_DAMAGE_SUSTAINED_INTERVAL.get() + "s, 量:" + ModConfig.SMALL_DAMAGE_SUSTAINED_AMOUNT.get() + ")"), false);
 
+        source.sendSuccess(() -> Component.literal("§6--- 足デバフ設定 ---"), false);
+        source.sendSuccess(() -> Component.literal("§7有効: §f" + (ModConfig.LEG_BONUS_ENABLED.get() ? "ON" : "OFF")
+            + " §7加算閾値: §f" + ModConfig.LEG_BONUS1_THRESHOLD.get() + "/" + ModConfig.LEG_BONUS2_THRESHOLD.get()), false);
+        source.sendSuccess(() -> Component.literal("§7速度サンプル: §f" + ModConfig.LEG_SPEED_SAMPLE_INTERVAL.get() + "t"
+            + " §7消費間隔: §f" + ModConfig.LEG_BONUS_CONSUME_INTERVAL.get() + "t"
+            + " §7ランク維持: §f" + ModConfig.LEG_RANK_HOLD_TICKS.get() + "t"
+            + " §7大落下: §f" + ModConfig.LEG_LARGE_FALL_DISTANCE.get() + "ブロック"), false);
+        source.sendSuccess(() -> Component.literal("§7速度区分: §f" + ModConfig.LEG_SPEED_T1.get() + "/" + ModConfig.LEG_SPEED_T2.get()
+            + "/" + ModConfig.LEG_SPEED_T3.get() + "/" + ModConfig.LEG_SPEED_T4.get() + " blocks/tick"), false);
+
         return 1;
     }
 }

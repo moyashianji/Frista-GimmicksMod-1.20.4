@@ -1,12 +1,15 @@
 package com.furasuta.emergencyescape.client;
 
 import com.furasuta.emergencyescape.capability.BodyPartHealthCapability;
+import com.furasuta.emergencyescape.capability.DamageConsumptionCapability;
 import com.furasuta.emergencyescape.capability.EmergencyEscapeCapability;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import org.joml.Vector3f;
 
 import java.util.Random;
 
@@ -16,7 +19,8 @@ import java.util.Random;
 public class ClientPacketHandler {
 
     public static void handleSyncCapabilities(float headHealth, float bodyHealth, int maxHeadHealth, int maxBodyHealth,
-                                               boolean isActive, boolean isEscaping, int escapeTicksRemaining, boolean systemActive) {
+                                               boolean isActive, boolean isEscaping, int escapeTicksRemaining, boolean systemActive,
+                                               float legDamageAccum) {
         Minecraft mc = Minecraft.getInstance();
         Player player = mc.player;
         if (player != null) {
@@ -27,6 +31,10 @@ public class ClientPacketHandler {
             player.getCapability(EmergencyEscapeCapability.CAPABILITY).ifPresent(cap -> {
                 cap.setHasItem(systemActive);
             });
+
+            player.getCapability(DamageConsumptionCapability.CAPABILITY).ifPresent(cap -> {
+                cap.setLegDamageAccum(legDamageAccum);
+            });
         }
     }
 
@@ -34,22 +42,47 @@ public class ClientPacketHandler {
      * 他プレイヤーのガスパーティクルを表示する。
      * 自分自身のガスは表示しない（視界の邪魔になるため）。
      */
-    public static void handleSpawnGasParticles(int entityId, int gasType, double x, double y, double z) {
+    public static void handleSpawnGasParticles(int entityId, int gasType, int bonusLevel, double x, double y, double z) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
 
-        // 自分自身のパーティクルは表示しない
+        // 自分自身のパーティクルは表示しない（視界の邪魔になるため）
         if (mc.player.getId() == entityId) return;
 
         Level level = mc.level;
         Entity entity = level.getEntity(entityId);
         if (entity == null) return;
 
-        spawnGasParticles(level, x, y, z, gasType);
+        spawnGasParticles(level, x, y, z, gasType, bonusLevel);
     }
 
-    private static void spawnGasParticles(Level level, double x, double y, double z, int type) {
+    private static void spawnGasParticles(Level level, double x, double y, double z, int type, int bonusLevel) {
         Random random = new Random();
+
+        // 足デバフ（加算）状態のエフェクト。周囲から負傷が分かるようにする。
+        // 仕様: 加算1=普段の黒ふわ＋薄いグレーのちらちら / 加算2=さらに紫のちらちら
+        if (bonusLevel >= 1) {
+            // 薄いグレーのちらちら
+            DustParticleOptions grey = new DustParticleOptions(new Vector3f(0.82f, 0.83f, 0.86f), 1.0f);
+            int n = 1 + random.nextInt(2); // 1〜2個（ちらちら感）
+            for (int i = 0; i < n; i++) {
+                double ox = (random.nextDouble() - 0.5) * 0.7;
+                double oy = random.nextDouble() * 1.6 + 0.2;
+                double oz = (random.nextDouble() - 0.5) * 0.7;
+                level.addParticle(grey, x + ox, y + oy, z + oz, 0, 0.03, 0);
+            }
+        }
+        if (bonusLevel >= 2) {
+            // さらに紫のちらちら
+            DustParticleOptions purple = new DustParticleOptions(new Vector3f(0.62f, 0.24f, 0.85f), 1.1f);
+            int n = 1 + random.nextInt(2);
+            for (int i = 0; i < n; i++) {
+                double ox = (random.nextDouble() - 0.5) * 0.7;
+                double oy = random.nextDouble() * 1.6 + 0.2;
+                double oz = (random.nextDouble() - 0.5) * 0.7;
+                level.addParticle(purple, x + ox, y + oy, z + oz, 0, 0.03, 0);
+            }
+        }
 
         if (type == 1) {
             // 重ガス - 大ダメージ即時消費時の噴射エフェクト

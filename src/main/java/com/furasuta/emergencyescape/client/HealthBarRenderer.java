@@ -2,6 +2,9 @@ package com.furasuta.emergencyescape.client;
 
 import com.furasuta.emergencyescape.EmergencyEscapeMod;
 import com.furasuta.emergencyescape.capability.BodyPartHealthCapability;
+import com.furasuta.emergencyescape.capability.DamageConsumptionCapability;
+import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.entity.player.Player;
@@ -20,6 +23,12 @@ public class HealthBarRenderer {
     private static final int BODY_ORANGE = 0xFFFF8C00;
     private static final int BODY_RED = 0xFFFF0000;
     private static final int BODY_BLACK = 0xFF000000;
+
+    // 足デバフ（加算）アイコン
+    private static final ResourceLocation ICON_BONUS1 =
+            new ResourceLocation(EmergencyEscapeMod.MODID, "textures/gui/leg_bonus1.png");
+    private static final ResourceLocation ICON_BONUS2 =
+            new ResourceLocation(EmergencyEscapeMod.MODID, "textures/gui/leg_bonus2.png");
 
     // 頭部HP色（六角形）
     private static final int HEAD_CYAN = 0xFF00D9B8;
@@ -53,10 +62,17 @@ public class HealthBarRenderer {
         Player player = mc.player;
         if (player == null) return;
 
+        GuiGraphics guiGraphics = event.getGuiGraphics();
+
+        // クリエイティブ時：速度バンド調整用に現在の水平速度を表示
+        if (player.isCreative()) {
+            String speedText = String.format("速度: %.3f blocks/tick", KeyInputHandler.clientHorizontalSpeed);
+            guiGraphics.drawString(mc.font, speedText, 4, 4, 0xFFFFFF00, true);
+        }
+
         player.getCapability(BodyPartHealthCapability.CAPABILITY).ifPresent(cap -> {
             if (!cap.isActive()) return;
 
-            GuiGraphics guiGraphics = event.getGuiGraphics();
             int screenWidth = mc.getWindow().getGuiScaledWidth();
             int screenHeight = mc.getWindow().getGuiScaledHeight();
 
@@ -78,7 +94,24 @@ public class HealthBarRenderer {
             if (holdProgress > 0) {
                 drawEscapeProgress(guiGraphics, centerX, healthBarY - 42, holdProgress);
             }
+
+            // 足デバフ（加算）インジケーター
+            int bonusLevel = player.getCapability(DamageConsumptionCapability.CAPABILITY)
+                    .map(DamageConsumptionCapability::getBonusLevel).orElse(0);
+            if (bonusLevel > 0) {
+                drawLegBonusIndicator(guiGraphics, bodyX, bodyY - 20, bonusLevel);
+            }
         });
+    }
+
+    /**
+     * 足デバフ（加算）状態のアイコン。加算1=白ふわ / 加算2=紫ふわ（16x16テクスチャ）。
+     */
+    private static void drawLegBonusIndicator(GuiGraphics guiGraphics, int x, int y, int level) {
+        ResourceLocation icon = level >= 2 ? ICON_BONUS2 : ICON_BONUS1;
+        RenderSystem.enableBlend();
+        guiGraphics.blit(icon, x, y, 0.0F, 0.0F, 16, 16, 16, 16);
+        RenderSystem.disableBlend();
     }
 
     private static void drawBodyHealthIndicator(GuiGraphics guiGraphics, int x, int y, float healthPercent) {

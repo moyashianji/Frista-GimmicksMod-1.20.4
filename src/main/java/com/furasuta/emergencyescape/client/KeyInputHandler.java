@@ -39,6 +39,11 @@ public class KeyInputHandler {
     private static boolean wasKeyDown = false;
     private static boolean escapeTriggered = false;
 
+    // 調整用：クライアント側で実測した水平移動速度(blocks/tick)。HUDのクリエ速度表示に使用。
+    public static double clientHorizontalSpeed = 0.0;
+    private static double lastPosX, lastPosZ;
+    private static boolean speedPosInit = false;
+
     private static boolean isClientSystemActive() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return false;
@@ -58,8 +63,21 @@ public class KeyInputHandler {
             keyPressStartTime = 0;
             wasKeyDown = false;
             escapeTriggered = false;
+            speedPosInit = false;
             return;
         }
+
+        // 水平移動速度を座標差分から実測（サーバー側の判定と同じ考え方。調整用表示に使用）
+        if (!speedPosInit) {
+            lastPosX = mc.player.getX();
+            lastPosZ = mc.player.getZ();
+            speedPosInit = true;
+        }
+        double sdx = mc.player.getX() - lastPosX;
+        double sdz = mc.player.getZ() - lastPosZ;
+        clientHorizontalSpeed = Math.sqrt(sdx * sdx + sdz * sdz);
+        lastPosX = mc.player.getX();
+        lastPosZ = mc.player.getZ();
 
         // システム有効時はF5(視点切替)をブロック
         if (isClientSystemActive()) {

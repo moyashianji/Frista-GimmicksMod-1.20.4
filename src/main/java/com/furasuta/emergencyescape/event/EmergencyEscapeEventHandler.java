@@ -121,6 +121,7 @@ public class EmergencyEscapeEventHandler {
 
             if (cap.isActive()) {
                 cap.tick(player);
+                cap.tickLegBonus(player);
 
                 // レベル消費で0到達 -> 緊急脱出発動
                 boolean isEscaping = player.getCapability(EmergencyEscapeCapability.CAPABILITY)
@@ -191,9 +192,11 @@ public class EmergencyEscapeEventHandler {
             syncCapabilities(sp);
 
             int gasType = getGasParticleType(player);
-            if (gasType > 0) {
+            int bonusLevel = player.getCapability(DamageConsumptionCapability.CAPABILITY)
+                    .map(c -> c.isActive() ? c.getBonusLevel() : 0).orElse(0);
+            if (gasType > 0 || bonusLevel > 0) {
                 SpawnGasParticlesPacket gasPacket = new SpawnGasParticlesPacket(
-                    player.getId(), gasType, player.getX(), player.getY(), player.getZ());
+                    player.getId(), gasType, bonusLevel, player.getX(), player.getY(), player.getZ());
                 NetworkHandler.CHANNEL.send(gasPacket, PacketDistributor.TRACKING_ENTITY.with(player));
             }
         }
@@ -261,6 +264,13 @@ public class EmergencyEscapeEventHandler {
             }
         });
 
+        // 足への被弾は部位体力を消費しないが、加算デバフ用に累積する
+        if (hitPart == BodyPart.LEGS) {
+            player.getCapability(DamageConsumptionCapability.CAPABILITY).ifPresent(cap -> {
+                if (cap.isActive()) cap.addLegDamage(damage);
+            });
+        }
+
         boolean isLargeDamage = damage >= ModConfig.LARGE_DAMAGE_THRESHOLD.get();
 
         String damageSourceType = source.type().msgId();
@@ -316,6 +326,7 @@ public class EmergencyEscapeEventHandler {
 
         player.getCapability(DamageConsumptionCapability.CAPABILITY).ifPresent(cap -> {
             cap.clearAllTimers();
+            cap.resetLegBonus();
         });
 
         player.getCapability(BodyPartHealthCapability.CAPABILITY).ifPresent(cap -> {
@@ -384,6 +395,7 @@ public class EmergencyEscapeEventHandler {
             original.getCapability(DamageConsumptionCapability.CAPABILITY).ifPresent(oldCap -> {
                 newPlayer.getCapability(DamageConsumptionCapability.CAPABILITY).ifPresent(newCap -> {
                     newCap.clearAllTimers();
+                    newCap.resetLegBonus();
                 });
             });
 
@@ -585,6 +597,8 @@ public class EmergencyEscapeEventHandler {
     }
 
     private static void syncCapabilities(ServerPlayer player) {
+        float legAccum = player.getCapability(DamageConsumptionCapability.CAPABILITY)
+                .map(DamageConsumptionCapability::getLegDamageAccum).orElse(0f);
         player.getCapability(BodyPartHealthCapability.CAPABILITY).ifPresent(bodyPartCap -> {
             player.getCapability(EmergencyEscapeCapability.CAPABILITY).ifPresent(escapeCap -> {
                 SyncCapabilitiesPacket packet = new SyncCapabilitiesPacket(
@@ -595,7 +609,8 @@ public class EmergencyEscapeEventHandler {
                         bodyPartCap.isActive(),
                         escapeCap.isEscaping(),
                         escapeCap.getEscapeTicksRemaining(),
-                        bodyPartCap.isActive()
+                        bodyPartCap.isActive(),
+                        legAccum
                 );
                 NetworkHandler.CHANNEL.send(packet, PacketDistributor.PLAYER.with(player));
             });
