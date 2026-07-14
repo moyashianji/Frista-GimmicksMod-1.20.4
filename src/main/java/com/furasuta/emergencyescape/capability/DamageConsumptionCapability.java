@@ -114,6 +114,22 @@ public class DamageConsumptionCapability implements INBTSerializable<CompoundTag
         return isActive;
     }
 
+    /** 経験値が漏出中か（有効かつ消費タイマーがある）。サーバー側の真値。 */
+    public boolean isLeaking() {
+        return isActive && !activeTimers.isEmpty();
+    }
+
+    // クライアント表示用（サーバーから同期される漏出中フラグ）
+    private transient boolean clientLeaking = false;
+
+    public void setClientLeaking(boolean value) {
+        this.clientLeaking = value;
+    }
+
+    public boolean isClientLeaking() {
+        return clientLeaking;
+    }
+
     public void setActive(boolean active) {
         this.isActive = active;
         if (!active) {

@@ -61,6 +61,8 @@ public class ModConfig {
     public static final ForgeConfigSpec.IntValue LEG_BONUS_CONSUME_INTERVAL;
     public static final ForgeConfigSpec.IntValue LEG_RANK_HOLD_TICKS;
     public static final ForgeConfigSpec.DoubleValue LEG_LARGE_FALL_DISTANCE;
+    public static final ForgeConfigSpec.IntValue LEG_EFFECT_INTERVAL;
+    public static final ForgeConfigSpec.IntValue LEG_EFFECT_COUNT;
     public static final ForgeConfigSpec.DoubleValue LEG_SPEED_T1;
     public static final ForgeConfigSpec.DoubleValue LEG_SPEED_T2;
     public static final ForgeConfigSpec.DoubleValue LEG_SPEED_T3;
@@ -223,6 +225,12 @@ public class ModConfig {
         LEG_LARGE_FALL_DISTANCE = BUILDER
                 .comment("この落下距離（ブロック）を超える落下のみ、鉛直速度を速度判定に加える（階段等の誤検知防止）")
                 .defineInRange("largeFallDistance", 3.0, 0.0, 256.0);
+        LEG_EFFECT_INTERVAL = BUILDER
+                .comment("加算エフェクト（白/紫ガス）を出す間隔（tick）。20tick=1秒。※黒ガス(経験値消費)が出ている時のみ発生")
+                .defineInRange("effectIntervalTicks", 50, 5, 600);
+        LEG_EFFECT_COUNT = BUILDER
+                .comment("加算エフェクト1回あたりの粒の数（白/紫それぞれ）")
+                .defineInRange("effectCount", 1, 1, 20);
 
         BUILDER.comment("速度ランクの区切り（blocks/tick）。①<T1 / T1<=②<T2 / T2<=③<T3 / T3<=④<T4 / ⑤>=T4").push("speedBands");
         LEG_SPEED_T1 = BUILDER.comment("ランク①(静止)とランク②(歩行)の境界").defineInRange("speedT1", 0.05, 0.0, 100.0);

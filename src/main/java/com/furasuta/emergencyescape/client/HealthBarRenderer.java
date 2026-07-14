@@ -29,6 +29,9 @@ public class HealthBarRenderer {
             new ResourceLocation(EmergencyEscapeMod.MODID, "textures/gui/leg_bonus1.png");
     private static final ResourceLocation ICON_BONUS2 =
             new ResourceLocation(EmergencyEscapeMod.MODID, "textures/gui/leg_bonus2.png");
+    // 経験値漏出中インジケーター
+    private static final ResourceLocation ICON_LEAK =
+            new ResourceLocation(EmergencyEscapeMod.MODID, "textures/gui/leak_icon.png");
 
     // 頭部HP色（六角形）
     private static final int HEAD_CYAN = 0xFF00D9B8;
@@ -100,6 +103,15 @@ public class HealthBarRenderer {
                     .map(DamageConsumptionCapability::getBonusLevel).orElse(0);
             if (bonusLevel > 0) {
                 drawLegBonusIndicator(guiGraphics, bodyX, bodyY - 20, bonusLevel);
+            }
+
+            // 経験値漏出中インジケーター（経験値レベルの上・漏出が止まれば消える）
+            boolean leaking = player.getCapability(DamageConsumptionCapability.CAPABILITY)
+                    .map(DamageConsumptionCapability::isClientLeaking).orElse(false);
+            if (leaking) {
+                RenderSystem.enableBlend();
+                guiGraphics.blit(ICON_LEAK, centerX - 8, healthBarY - 13, 16, 16, 0.0F, 0.0F, 32, 32, 32, 32);
+                RenderSystem.disableBlend();
             }
         });
     }

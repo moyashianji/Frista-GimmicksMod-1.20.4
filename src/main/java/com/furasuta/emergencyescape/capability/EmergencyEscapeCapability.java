@@ -20,6 +20,7 @@ public class EmergencyEscapeCapability implements INBTSerializable<CompoundTag> 
     private int escapeTicksRemaining = 0;
     private double escapeX, escapeY, escapeZ;
     private boolean hasItem = false;
+    private boolean voluntary = false; // 自発脱出(Pキー)かどうか（死亡メッセージ用）
 
     public static void register(RegisterCapabilitiesEvent event) {
         event.register(EmergencyEscapeCapability.class);
@@ -40,6 +41,15 @@ public class EmergencyEscapeCapability implements INBTSerializable<CompoundTag> 
     public void stopEscape() {
         this.isEscaping = false;
         this.escapeTicksRemaining = 0;
+        this.voluntary = false;
+    }
+
+    public boolean isVoluntary() {
+        return voluntary;
+    }
+
+    public void setVoluntary(boolean voluntary) {
+        this.voluntary = voluntary;
     }
 
     public int getEscapeTicksRemaining() {

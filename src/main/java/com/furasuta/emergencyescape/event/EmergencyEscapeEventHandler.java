@@ -151,16 +151,22 @@ public class EmergencyEscapeEventHandler {
         // 脱出状態の処理
         player.getCapability(EmergencyEscapeCapability.CAPABILITY).ifPresent(cap -> {
             if (cap.isEscaping()) {
-                // 位置凍結（視点は自由に動かせる）
-                player.setPos(cap.getEscapeX(), cap.getEscapeY(), cap.getEscapeZ());
-                player.setDeltaMovement(0, 0, 0);
-                player.setOnGround(true);
+                // XZは固定。Yは上昇禁止(=ジャンプ封じ)＋低速落下のみ許可（視点は自由）
+                double ceilY = cap.getEscapeY();
+                double newY = Math.min(player.getY(), ceilY);
+                player.setPos(cap.getEscapeX(), newY, cap.getEscapeZ());
+                var motion = player.getDeltaMovement();
+                player.setDeltaMovement(0, Math.min(0, motion.y), 0); // 横移動・上昇を無効化、落下だけ許可
                 player.fallDistance = 0;
+                cap.updateEscapeY(newY);
 
-                // 移動抑制エフェクト
+                // 移動抑制＋低速落下（ドラマチックな降下）を毎tick維持
                 if (!player.hasEffect(MobEffects.MOVEMENT_SLOWDOWN)
                         || player.getEffect(MobEffects.MOVEMENT_SLOWDOWN).getAmplifier() < 200) {
                     player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 100, 255, false, false, false));
+                }
+                if (!player.hasEffect(MobEffects.SLOW_FALLING)) {
+                    player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, 100, 0, false, false, false));
                 }
 
                 if (cap.getEscapeTicksRemaining() % 20 == 0) {
@@ -175,9 +181,16 @@ public class EmergencyEscapeEventHandler {
                         player.getName().getString());
 
                     player.removeEffect(MobEffects.MOVEMENT_SLOWDOWN);
+                    player.removeEffect(MobEffects.SLOW_FALLING);
 
+                    boolean wasVoluntary = cap.isVoluntary();
                     if (player instanceof ServerPlayer serverPlayer) {
-                        spawnDeathEffects(serverPlayer, cap.getEscapeX(), cap.getEscapeY(), cap.getEscapeZ());
+                        // 煙は「死ぬ瞬間の現在位置（降下後）」に出す（ノックバック等でズレないように）
+                        spawnDeathEffects(serverPlayer, player.getX(), player.getY(), player.getZ());
+                        // ベイルアウトメッセージを全体表示
+                        String bailoutMsg = player.getName().getString()
+                                + (wasVoluntary ? " 自発ベイルアウト" : " ベイルアウト");
+                        serverPlayer.server.getPlayerList().broadcastSystemMessage(Component.literal(bailoutMsg), false);
                     }
 
                     // stopEscapeの前にkillすることでisEscaping()がtrueのままダメージが通る
@@ -192,11 +205,15 @@ public class EmergencyEscapeEventHandler {
             syncCapabilities(sp);
 
             int gasType = getGasParticleType(player);
-            int bonusLevel = player.getCapability(DamageConsumptionCapability.CAPABILITY)
-                    .map(c -> c.isActive() ? c.getBonusLevel() : 0).orElse(0);
-            if (gasType > 0 || bonusLevel > 0) {
+            // ① 経験値消費(黒ガス)が出ている時だけ、加算エフェクトも出す
+            if (gasType > 0) {
+                int bonusLevel = player.getCapability(DamageConsumptionCapability.CAPABILITY)
+                        .map(c -> c.isActive() ? c.getBonusLevel() : 0).orElse(0);
+                // ② 加算エフェクトは頻度を下げる（configの間隔ごとに1回だけ載せる）
+                int effectInterval = ModConfig.LEG_EFFECT_INTERVAL.get();
+                int effectBonus = (bonusLevel > 0 && player.tickCount % effectInterval < 5) ? bonusLevel : 0;
                 SpawnGasParticlesPacket gasPacket = new SpawnGasParticlesPacket(
-                    player.getId(), gasType, bonusLevel, player.getX(), player.getY(), player.getZ());
+                    player.getId(), gasType, effectBonus, player.getX(), player.getY(), player.getZ());
                 NetworkHandler.CHANNEL.send(gasPacket, PacketDistributor.TRACKING_ENTITY.with(player));
             }
         }
@@ -412,7 +429,11 @@ public class EmergencyEscapeEventHandler {
     }
 
     public static void triggerEmergencyEscape(Player player) {
-        LOGGER.info("[EmergencyEscape] 緊急脱出開始 プレイヤー: {}", player.getName().getString());
+        triggerEmergencyEscape(player, false);
+    }
+
+    public static void triggerEmergencyEscape(Player player, boolean voluntary) {
+        LOGGER.info("[EmergencyEscape] 緊急脱出開始 プレイヤー: {} (自発={})", player.getName().getString(), voluntary);
 
         player.getCapability(EmergencyEscapeCapability.CAPABILITY).ifPresent(cap -> {
             if (cap.isEscaping()) {
@@ -422,6 +443,7 @@ public class EmergencyEscapeEventHandler {
 
             int deathDelayTicks = ModConfig.ESCAPE_DEATH_DELAY.get() * 20;
             cap.startEscape(player, deathDelayTicks);
+            cap.setVoluntary(voluntary);
 
             LOGGER.info("[EmergencyEscape] 脱出開始 持続時間: {}秒 ({}tick)",
                 ModConfig.ESCAPE_DEATH_DELAY.get(), deathDelayTicks);
@@ -599,6 +621,8 @@ public class EmergencyEscapeEventHandler {
     private static void syncCapabilities(ServerPlayer player) {
         float legAccum = player.getCapability(DamageConsumptionCapability.CAPABILITY)
                 .map(DamageConsumptionCapability::getLegDamageAccum).orElse(0f);
+        boolean leaking = player.getCapability(DamageConsumptionCapability.CAPABILITY)
+                .map(DamageConsumptionCapability::isLeaking).orElse(false);
         player.getCapability(BodyPartHealthCapability.CAPABILITY).ifPresent(bodyPartCap -> {
             player.getCapability(EmergencyEscapeCapability.CAPABILITY).ifPresent(escapeCap -> {
                 SyncCapabilitiesPacket packet = new SyncCapabilitiesPacket(
@@ -610,7 +634,8 @@ public class EmergencyEscapeEventHandler {
                         escapeCap.isEscaping(),
                         escapeCap.getEscapeTicksRemaining(),
                         bodyPartCap.isActive(),
-                        legAccum
+                        legAccum,
+                        leaking
                 );
                 NetworkHandler.CHANNEL.send(packet, PacketDistributor.PLAYER.with(player));
             });

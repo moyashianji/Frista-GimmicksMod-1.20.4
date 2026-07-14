@@ -16,10 +16,11 @@ public class SyncCapabilitiesPacket {
     private final int escapeTicksRemaining;
     private final boolean systemActive; // コマンドで有効化されたシステムの状態
     private final float legDamageAccum; // 足ダメージの累積（加算デバフの表示用）
+    private final boolean leaking; // 経験値漏出中か（漏出アイコン表示用）
 
     public SyncCapabilitiesPacket(float headHealth, float bodyHealth, int maxHeadHealth, int maxBodyHealth,
                                    boolean isActive, boolean isEscaping, int escapeTicksRemaining, boolean systemActive,
-                                   float legDamageAccum) {
+                                   float legDamageAccum, boolean leaking) {
         this.headHealth = headHealth;
         this.bodyHealth = bodyHealth;
         this.maxHeadHealth = maxHeadHealth;
@@ -29,6 +30,7 @@ public class SyncCapabilitiesPacket {
         this.escapeTicksRemaining = escapeTicksRemaining;
         this.systemActive = systemActive;
         this.legDamageAccum = legDamageAccum;
+        this.leaking = leaking;
     }
 
     public static void encode(SyncCapabilitiesPacket packet, FriendlyByteBuf buf) {
@@ -41,6 +43,7 @@ public class SyncCapabilitiesPacket {
         buf.writeInt(packet.escapeTicksRemaining);
         buf.writeBoolean(packet.systemActive);
         buf.writeFloat(packet.legDamageAccum);
+        buf.writeBoolean(packet.leaking);
     }
 
     public static SyncCapabilitiesPacket decode(FriendlyByteBuf buf) {
@@ -53,7 +56,8 @@ public class SyncCapabilitiesPacket {
                 buf.readBoolean(),
                 buf.readInt(),
                 buf.readBoolean(),
-                buf.readFloat()
+                buf.readFloat(),
+                buf.readBoolean()
         );
     }
 
@@ -65,7 +69,7 @@ public class SyncCapabilitiesPacket {
                         packet.maxHeadHealth, packet.maxBodyHealth,
                         packet.isActive, packet.isEscaping,
                         packet.escapeTicksRemaining, packet.systemActive,
-                        packet.legDamageAccum
+                        packet.legDamageAccum, packet.leaking
                 );
             });
         });

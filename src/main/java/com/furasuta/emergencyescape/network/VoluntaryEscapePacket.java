@@ -58,7 +58,7 @@ public class VoluntaryEscapePacket {
                 }
 
                 LOGGER.info("[VoluntaryEscape] Triggering voluntary escape for player: {}", player.getName().getString());
-                EmergencyEscapeEventHandler.triggerEmergencyEscape(player);
+                EmergencyEscapeEventHandler.triggerEmergencyEscape(player, true);
             });
         });
         ctx.setPacketHandled(true);

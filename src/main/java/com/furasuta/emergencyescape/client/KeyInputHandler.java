@@ -13,6 +13,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.InputEvent;
+import net.minecraftforge.client.event.MovementInputUpdateEvent;
 import net.minecraftforge.client.settings.KeyConflictContext;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
@@ -124,6 +125,24 @@ public class KeyInputHandler {
         int requiredHoldTime = ModConfig.VOLUNTARY_ESCAPE_HOLD_TIME.get();
 
         return Math.min(1.0f, (float) holdTime / requiredHoldTime);
+    }
+
+    /**
+     * 脱出中は移動入力（前後左右・ジャンプ）を無効化する。
+     * プレイヤー移動はクライアント権限のため、ここで入力を殺さないとジャンプで動けてしまう。
+     * 視点（マウス）は入力に含まれないので自由なまま。
+     */
+    @SubscribeEvent
+    public static void onMovementInput(MovementInputUpdateEvent event) {
+        if (!com.furasuta.emergencyescape.client.ClientPacketHandler.clientEscaping) return;
+        var input = event.getInput();
+        input.up = false;
+        input.down = false;
+        input.left = false;
+        input.right = false;
+        input.jumping = false;
+        input.forwardImpulse = 0.0F;
+        input.leftImpulse = 0.0F;
     }
 
     /**

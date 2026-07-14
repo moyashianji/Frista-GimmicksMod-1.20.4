@@ -3,6 +3,7 @@ package com.furasuta.emergencyescape.client;
 import com.furasuta.emergencyescape.capability.BodyPartHealthCapability;
 import com.furasuta.emergencyescape.capability.DamageConsumptionCapability;
 import com.furasuta.emergencyescape.capability.EmergencyEscapeCapability;
+import com.furasuta.emergencyescape.config.ModConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -18,9 +19,13 @@ import java.util.Random;
  */
 public class ClientPacketHandler {
 
+    /** 脱出中かどうか（サーバーから同期）。クライアント側の移動入力抑制に使用。 */
+    public static volatile boolean clientEscaping = false;
+
     public static void handleSyncCapabilities(float headHealth, float bodyHealth, int maxHeadHealth, int maxBodyHealth,
                                                boolean isActive, boolean isEscaping, int escapeTicksRemaining, boolean systemActive,
-                                               float legDamageAccum) {
+                                               float legDamageAccum, boolean leaking) {
+        clientEscaping = isEscaping;
         Minecraft mc = Minecraft.getInstance();
         Player player = mc.player;
         if (player != null) {
@@ -34,6 +39,7 @@ public class ClientPacketHandler {
 
             player.getCapability(DamageConsumptionCapability.CAPABILITY).ifPresent(cap -> {
                 cap.setLegDamageAccum(legDamageAccum);
+                cap.setClientLeaking(leaking);
             });
         }
     }
@@ -61,11 +67,11 @@ public class ClientPacketHandler {
 
         // 足デバフ（加算）状態のエフェクト。周囲から負傷が分かるようにする。
         // 仕様: 加算1=普段の黒ふわ＋薄いグレーのちらちら / 加算2=さらに紫のちらちら
+        int effectCount = ModConfig.LEG_EFFECT_COUNT.get();
         if (bonusLevel >= 1) {
-            // 薄いグレーのちらちら
+            // 白（薄いグレー）のふわ
             DustParticleOptions grey = new DustParticleOptions(new Vector3f(0.82f, 0.83f, 0.86f), 1.0f);
-            int n = 1 + random.nextInt(2); // 1〜2個（ちらちら感）
-            for (int i = 0; i < n; i++) {
+            for (int i = 0; i < effectCount; i++) {
                 double ox = (random.nextDouble() - 0.5) * 0.7;
                 double oy = random.nextDouble() * 1.6 + 0.2;
                 double oz = (random.nextDouble() - 0.5) * 0.7;
@@ -73,10 +79,9 @@ public class ClientPacketHandler {
             }
         }
         if (bonusLevel >= 2) {
-            // さらに紫のちらちら
+            // さらに紫のふわ
             DustParticleOptions purple = new DustParticleOptions(new Vector3f(0.62f, 0.24f, 0.85f), 1.1f);
-            int n = 1 + random.nextInt(2);
-            for (int i = 0; i < n; i++) {
+            for (int i = 0; i < effectCount; i++) {
                 double ox = (random.nextDouble() - 0.5) * 0.7;
                 double oy = random.nextDouble() * 1.6 + 0.2;
                 double oz = (random.nextDouble() - 0.5) * 0.7;
