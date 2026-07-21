@@ -124,10 +124,18 @@ public class ClientPacketHandler {
         }
     }
 
-    public static void handleSpawnParticles(double x, double y, double z) {
+    public static void handleSpawnParticles(int entityId, double x, double y, double z) {
         Minecraft mc = Minecraft.getInstance();
         Level level = mc.level;
         if (level != null) {
+            // 対象プレイヤーが見つかれば、その「実際の描画位置」にエフェクトを合わせる。
+            // 低速落下中やノックバックで座標がズレるのを防ぐ（生存中のガスと同じ挙動）。
+            Entity target = level.getEntity(entityId);
+            if (target != null) {
+                x = target.getX();
+                y = target.getY();
+                z = target.getZ();
+            }
             Random random = new Random();
 
             // 爆発パーティクル

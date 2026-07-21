@@ -593,7 +593,7 @@ public class EmergencyEscapeEventHandler {
             x, y, z, explosionRange, explosionVolume);
         level.playSound(null, x, y, z, ModSounds.EXPLOSION.get(), net.minecraft.sounds.SoundSource.PLAYERS, explosionVolume, 1.0f);
 
-        SpawnParticlesPacket packet = new SpawnParticlesPacket(x, y, z);
+        SpawnParticlesPacket packet = new SpawnParticlesPacket(player.getId(), x, y, z);
         NetworkHandler.CHANNEL.send(packet, PacketDistributor.NEAR.with(
                 new PacketDistributor.TargetPoint(x, y, z, 64, level.dimension())));
     }

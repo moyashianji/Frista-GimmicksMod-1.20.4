@@ -185,7 +185,15 @@ public class BodyPartHitbox {
      * レイキャストで被弾部位を判定する。最も近いヒットボックスを返す。
      */
     public static BodyPart getHitBodyPart(Player player, Vec3 attackOrigin, Vec3 attackDirection) {
-        Vec3 rayEnd = attackOrigin.add(attackDirection.scale(10));
+        return getHitBodyPart(player, attackOrigin, attackDirection, 10.0);
+    }
+
+    /**
+     * レイキャストで被弾部位を判定する（レイ長指定）。
+     * 高速な弾は1tickの移動距離が大きいため、その距離以上のレイ長が必要。
+     */
+    public static BodyPart getHitBodyPart(Player player, Vec3 attackOrigin, Vec3 attackDirection, double maxDistance) {
+        Vec3 rayEnd = attackOrigin.add(attackDirection.scale(maxDistance));
 
         AABB headBox = getBodyPartAABB(player, BodyPart.HEAD);
         AABB bodyBox = getBodyPartAABB(player, BodyPart.BODY);
@@ -318,14 +326,21 @@ public class BodyPartHitbox {
      * 同期データがない場合は静的計算にフォールバックする。
      */
     public static BodyPart getHitBodyPartWithPose(Player player, Vec3 attackOrigin, Vec3 attackDirection) {
+        return getHitBodyPartWithPose(player, attackOrigin, attackDirection, 10.0);
+    }
+
+    /**
+     * 同期済みモデルパーツデータを使ったレイキャスト被弾判定（レイ長指定）。
+     */
+    public static BodyPart getHitBodyPartWithPose(Player player, Vec3 attackOrigin, Vec3 attackDirection, double maxDistance) {
         UUID playerUUID = player.getUUID();
         PlayerModelPartCache.CachedPlayerParts cachedParts = PlayerModelPartCache.getPlayerParts(playerUUID);
 
         if (cachedParts == null) {
-            return getHitBodyPart(player, attackOrigin, attackDirection);
+            return getHitBodyPart(player, attackOrigin, attackDirection, maxDistance);
         }
 
-        Vec3 rayEnd = attackOrigin.add(attackDirection.scale(10));
+        Vec3 rayEnd = attackOrigin.add(attackDirection.scale(maxDistance));
         double minDist = Double.MAX_VALUE;
         BodyPart result = BodyPart.NONE;
 

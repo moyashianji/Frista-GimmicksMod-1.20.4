@@ -80,17 +80,19 @@ public class ModCommands {
         }
 
         for (ServerPlayer target : targets) {
+            // 有効化時は必ず体力を最大にリセットする（OFF→ON で前回の体力を引き継がない）
             target.getCapability(BodyPartHealthCapability.CAPABILITY).ifPresent(cap -> {
-                if (cap.isActive()) {
-                    source.sendSuccess(() -> Component.literal(
-                        "§e" + target.getName().getString() + " の特殊体力は既に有効です"), false);
-                    return;
-                }
+                boolean wasActive = cap.isActive();
                 cap.setActive(true);
-                LOGGER.info("[EmergencyEscape] 特殊体力システム有効化: {}", target.getName().getString());
+                cap.reset();
+                LOGGER.info("[EmergencyEscape] 特殊体力システム有効化(体力リセット): {} (既に有効だった={})",
+                        target.getName().getString(), wasActive);
             });
 
+            // 消費タイマー・足デバフの累積もクリアして完全に初期状態から開始
             target.getCapability(DamageConsumptionCapability.CAPABILITY).ifPresent(cap -> {
+                cap.clearAllTimers();
+                cap.resetLegBonus();
                 cap.setActive(true);
             });
 

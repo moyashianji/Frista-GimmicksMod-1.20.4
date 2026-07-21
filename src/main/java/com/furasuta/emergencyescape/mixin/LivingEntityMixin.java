@@ -48,32 +48,41 @@ public abstract class LivingEntityMixin {
             hitSource = "projectile:" + projectile.getType().toShortString();
 
             if (projMotion.lengthSqr() > 0.001) {
-                Vec3 prevPos = projPos.subtract(projMotion);
+                // このtickで弾が通った線分（掃過軌道）を復元する。
+                // 高速弾は1tickで数十ブロック進むうえ、着弾tickでは弾がまだ動いていない
+                // （position()が発射位置のまま）ことがあるため、
+                //  ・始点は「1tick前の位置」
+                //  ・レイ長は「1tickの移動距離」を必ず超える長さ
+                // にしないと軌道がプレイヤーに届かず、発射位置の高さで誤判定する。
+                double motionLen = projMotion.length();
                 Vec3 trajectoryDir = projMotion.normalize();
-                attackOrigin = prevPos;
+                Vec3 rayStart = projPos.subtract(projMotion);
+                double rayLen = motionLen * 2.0 + 8.0; // 弾が未移動/通過済みのどちらでも届く長さ
+                attackOrigin = rayStart;
                 attackDirection = trajectoryDir;
 
-                // 前tick位置がプレイヤーBB外なら、軌道とBBの交点を着弾位置とする
-                net.minecraft.world.phys.AABB playerBox = player.getBoundingBox().inflate(0.3);
-                if (!playerBox.contains(prevPos)) {
-                    Vec3 rayEnd = prevPos.add(trajectoryDir.scale(20));
-                    java.util.Optional<Vec3> intersection = playerBox.clip(prevPos, rayEnd);
-                    if (intersection.isPresent()) {
-                        hitPosition = intersection.get();
-                        hitSource = "projectile_intersection:" + projectile.getType().toShortString();
-                    }
+                // 軌道レイを「各部位のヒットボックス」に直接当てて、最も近い部位を採用する。
+                // （膨張させた全身BBとの交点→点内包判定、だと近似フォールバックに落ちやすい）
+                bodyPart = BodyPartHitbox.getHitBodyPartWithPose(player, rayStart, trajectoryDir, rayLen);
+                hitSource = "projectile_trajectory:" + projectile.getType().toShortString();
+
+                // 着弾座標も軌道から求めておく（ログ/フォールバック用）
+                net.minecraft.world.phys.AABB playerBox = player.getBoundingBox().inflate(0.1);
+                java.util.Optional<Vec3> intersection =
+                        playerBox.clip(rayStart, rayStart.add(trajectoryDir.scale(rayLen)));
+                if (intersection.isPresent()) {
+                    hitPosition = intersection.get();
                 }
             } else {
                 attackOrigin = projPos;
                 attackDirection = new Vec3(0, 0, 0);
+                bodyPart = BodyPartHitbox.getBodyPartAtPointWithPose(player, projPos);
+                hitSource = "projectile_static:" + projectile.getType().toShortString();
             }
 
-            // ポイントベースで部位判定（レイキャストではなく交点座標で判定）
-            bodyPart = BodyPartHitbox.getBodyPartAtPointWithPose(player, hitPosition);
-
-            if (bodyPart == BodyPartHitbox.BodyPart.NONE) {
-                // フォールバック: 現在位置で再判定
-                bodyPart = BodyPartHitbox.getBodyPartAtPointWithPose(player, projPos);
+            if (bodyPart == null || bodyPart == BodyPartHitbox.BodyPart.NONE) {
+                // フォールバック: 求めた着弾座標で点判定
+                bodyPart = BodyPartHitbox.getBodyPartAtPointWithPose(player, hitPosition);
                 hitSource = "projectile_point_fallback:" + projectile.getType().toShortString();
             }
 
